@@ -51,6 +51,14 @@ atualiza_plataforma() {
     return 0
   fi
 
+  # Antes de mexer em qualquer coisa: pull recusado no meio da troca pareceria versão quebrada e
+  # dispararia a volta à toa. Nada mudou ainda, então é só trocar o token e atualizar de novo.
+  if ! acesso_confere; then
+    if [ "$ACESSO_MOTIVO" = token ]; then
+      erro_fatal "Token vencido ou trocado" "Rode asimov token e depois asimov atualizar."
+    fi
+    erro_fatal "Não consegui falar com $(registro_host)" "Confira a internet da VPS e rode asimov atualizar de novo."
+  fi
   secao "Atualização"
   info "De $(destaque "$anterior") para $(destaque "v$VERSAO"). A plataforma fica fora do ar por alguns segundos."
   echo

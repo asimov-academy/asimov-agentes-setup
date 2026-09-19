@@ -23,6 +23,9 @@ jobs:
         run: bash setup/testes/simula_provedor.sh
       - name: Atualização simulada, com volta de versão
         run: bash setup/testes/simula_atualizacao.sh
+      - name: Usuário do registro preenchido
+        run: |
+          ! grep -n 'PREENCHER' setup/lib/acesso.sh
       - name: Nada de código da aplicação
         run: |
           for pasta in backend frontend spec painel .claude; do

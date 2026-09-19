@@ -37,6 +37,8 @@ source "$DIR_LIB/dados.sh"
 source "$DIR_LIB/dns.sh"
 # shellcheck source=setup/lib/instalacao.sh
 source "$DIR_LIB/instalacao.sh"
+# shellcheck source=setup/lib/acesso.sh
+source "$DIR_LIB/acesso.sh"
 # shellcheck source=setup/lib/atualizacao.sh
 source "$DIR_LIB/atualizacao.sh"
 # shellcheck source=setup/lib/vinculo.sh

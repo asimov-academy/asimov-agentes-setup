@@ -192,6 +192,8 @@ tela_instalacao() {
 
   confere_maquina
   confere_proxy_do_dns
+  # Antes dos passos: a pergunta do token não cabe dentro de um `passo`, que roda calado.
+  estado_tem passo_imagens || tela_acesso
   passo swap "Memória de reserva (swap)" "Veja o log." garante_swap
   passo firewall "Firewall (SSH, 80 e 443)" "Confira com: ufw status" firewall
   passo agente_codigo "$(ia_nome)" "Veja o log." instala_agente_codigo

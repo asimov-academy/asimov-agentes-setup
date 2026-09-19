@@ -30,12 +30,13 @@ d) Alterar os arquivos de configuração, os prompts e os modelos de texto que o
 
 a) Redistribuir, revender, sublicenciar, alugar ou publicar o Software, inteiro ou em parte,
    incluindo as imagens Docker.
-b) Fazer engenharia reversa, descompilar ou extrair o código das imagens Docker, salvo no limite
+b) Compartilhar, fora da trilha, o token de acesso às imagens.
+c) Fazer engenharia reversa, descompilar ou extrair o código das imagens Docker, salvo no limite
    em que a lei aplicável não permita essa restrição.
-c) Remover ou alterar avisos de autoria, de marca ou desta licença.
-d) Usar o nome ou as marcas da Asimov Academy para promover produto ou serviço próprio sem
+d) Remover ou alterar avisos de autoria, de marca ou desta licença.
+e) Usar o nome ou as marcas da Asimov Academy para promover produto ou serviço próprio sem
    autorização escrita.
-e) Oferecer o Software a terceiros como produto próprio ou como plataforma concorrente.
+f) Oferecer o Software a terceiros como produto próprio ou como plataforma concorrente.
 
 5. Componentes de terceiros
 
@@ -66,7 +67,8 @@ qualquer dano decorrente do uso ou da impossibilidade de uso do Software.
 
 Esta licença termina automaticamente se o Licenciado descumprir qualquer cláusula, e pode ser
 encerrada pela Asimov Academy com o fim do vínculo que deu origem a ela. Com o término, o
-Licenciado deve parar de usar o Software e apagar as cópias.
+Licenciado deve parar de usar o Software e apagar as cópias. A Asimov Academy pode trocar o token
+de acesso às imagens a qualquer momento.
 
 10. Lei e foro
 

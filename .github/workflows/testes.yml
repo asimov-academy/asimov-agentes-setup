@@ -19,6 +19,8 @@ jobs:
             install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh
       - name: Onboarding simulado
         run: ASIMOV_TTY=setup/testes/respostas.txt bash setup/testes/simula_onboarding.sh
+      - name: Pergunta do provedor, os dois caminhos e o Enter no terminal
+        run: bash setup/testes/simula_provedor.sh
       - name: Atualização simulada, com volta de versão
         run: bash setup/testes/simula_atualizacao.sh
       - name: Nada de código da aplicação

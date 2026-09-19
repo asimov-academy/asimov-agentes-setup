@@ -165,7 +165,9 @@ tela_dados() {
   echo
   # A imagem Ubuntu da Oracle traz um REJECT no iptables que o ufw não vence: o passo de firewall
   # precisa saber disso. A liberação no painel da Oracle é com o operador, antes de instalar.
-  escolha provedor "Onde está sua VPS?" "Oracle Cloud" "Outro provedor"
+  escolha provedor "Onde está sua VPS?" \
+    "Outro provedor  ${CINZA}Hostinger, HostGator, Contabo, DigitalOcean...${NORMAL}" \
+    "Oracle Cloud"
   echo
   dica "É o assistente que move o copiloto do painel, pela assinatura que você já paga."
   escolha opcao "Assistente do copiloto" "Claude Code" "Codex"
@@ -176,6 +178,6 @@ tela_dados() {
   env_set SUBDOMINIO_BOT "bot.$dominio"
   env_set EMAIL_SSL "$email"
   env_set AGENTE_CODIGO "$([ "$opcao" = 1 ] && echo claude_code || echo codex)"
-  env_set PROVEDOR_VPS "$([ "$provedor" = 1 ] && echo oracle || echo outro)"
+  env_set PROVEDOR_VPS "$([ "$provedor" = 2 ] && echo oracle || echo outro)"
   estado_set dados_confirmados "$(date -Is)"
 }

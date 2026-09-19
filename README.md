@@ -68,7 +68,7 @@ O instalador pergunta, nesta ordem:
 
 1. Se os agentes são só da sua empresa ou para empresas clientes
 2. Domínio e e-mail para o certificado SSL
-3. Onde está sua VPS: **Oracle Cloud** ou **outro provedor**
+3. Onde está sua VPS: **outro provedor** (Hostinger, HostGator...) ou **Oracle Cloud**
 4. Claude Code ou Codex para o copiloto
 5. O registro DNS `bot.<seu-domínio>` (ele mostra o IP e espera propagar)
 6. Se quer entrar na sua conta do assistente agora, ou depois com `asimov ia`

@@ -212,7 +212,6 @@ fluxo_diagnostico() {
     confere_endereco "Painel" "https://$(env_get SUBDOMINIO_APP)/painel/entrar"
   fi
   echo
-  mostra_acesso
   mostra_backup
   echo
   if [ "$(estado_get versao)" != "$VERSAO" ]; then

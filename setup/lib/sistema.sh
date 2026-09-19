@@ -58,7 +58,7 @@ tela_iniciando() {
     "Este setup só roda em Ubuntu 24.04. Reinstale a VPS com essa imagem." \
     --sem-repetir verifica_ubuntu
   passo recursos "Memória e disco" \
-    "A VPS precisa de 2 GB de RAM e 20 GB livres. Aumente o plano." \
+    "A VPS precisa de 2 GB de RAM e 20 GB livres (4 GB para usar a WAHA junto com o copiloto). Aumente o plano." \
     --sem-repetir verifica_recursos
   passo update "Lista de pacotes" "Confira a internet da VPS: ping -c 3 archive.ubuntu.com" apt_update
   passo upgrade "Atualização do sistema" "Rode apt-get upgrade para ver o erro." apt_upgrade

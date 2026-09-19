@@ -16,9 +16,6 @@ espera_waha_no_ar() { :; }
 # Docker Hub e Compose não existem aqui: a tag nova vem de mentira e o `dc` só registra.
 curl() { case "$*" in *hub.docker.com*) echo '{"results":[{"name":"gows-2026.9.1"},{"name":"gows-arm-2026.9.1"},{"name":"gows-2026.8.2"},{"name":"gows-arm-2026.8.2"},{"name":"gows"},{"name":"dev"}]}' ;; *) return 1 ;; esac; }
 dc() { echo "dc $*" >>"$DIR/dc.log"; }
-# Imagens privadas: o registro recusa na primeira conferência e aceita depois do token.
-acesso_confere() { [ -f "$DIR/token_aceito" ] && return 0; ACESSO_MOTIVO=token; return 1; }
-acesso_entra() { [ "$2" = token-bom ] && touch "$DIR/token_aceito"; }
 qrencode() { printf '  [QR code de %s]\n' "${*: -1}"; touch "$DIR/qr_visto"; }
 # CLI de IA: aqui o Codex é de mentira. O arquivo marca que o login já rolou, como a credencial
 # de verdade faria em ~/.codex.
@@ -105,8 +102,6 @@ api() {
   esac
 }
 banner_asimov; tela_boas_vindas; tela_modo; tela_dados; tela_dns
-# Em tela_instalacao, antes dos passos: token recusado uma vez, aceito na segunda.
-tela_acesso
 # Como no instalar.sh: a conta de IA vem antes do painel. Aqui responde "sim" e o Codex de mentira
 # aceita o login, que é o caminho que liga o copiloto.
 tela_vinculo_ia

@@ -2,6 +2,22 @@
 # shellcheck disable=SC2034  # PASSO_ATUAL e PASSO_TOTAL são lidas por passo(), em estado.sh
 # Tela 5: firewall, ferramentas de desenvolvimento, segredos e a plataforma no ar.
 
+# garante_swap: abaixo de 4 GB, 2 GB de swap. A plataforma inteira (WAHA e copiloto em uso) encosta
+# em 2 GB de RAM; sem swap, o kernel mata um contêiner no meio de um atendimento. Não mexe em VPS
+# que já tem swap, seja qual for o tamanho.
+garante_swap() {
+  local memoria
+  memoria=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+  [ "$memoria" -lt 3800 ] || return 0
+  [ "$(awk 'NR>1' /proc/swaps | wc -l)" -eq 0 ] || return 0
+  [ ! -e /swapfile ] || return 0
+  $SUDO fallocate -l 2G /swapfile || $SUDO dd if=/dev/zero of=/swapfile bs=1M count=2048
+  $SUDO chmod 600 /swapfile
+  $SUDO mkswap /swapfile
+  $SUDO swapon /swapfile
+  grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null
+}
+
 firewall() {
   local porta
   # Libera a porta real do SSH antes de ligar o firewall, para não trancar o operador fora.
@@ -170,14 +186,13 @@ confere_proxy_do_dns() {
 tela_instalacao() {
   secao "Instalação"
   PASSO_ATUAL=0
-  PASSO_TOTAL=11
+  PASSO_TOTAL=12
   local sub
   sub=$(env_get SUBDOMINIO_BOT)
 
   confere_maquina
   confere_proxy_do_dns
-  # Antes dos passos: a pergunta do token não cabe dentro de um `passo`, que roda calado.
-  estado_tem passo_imagens || tela_acesso
+  passo swap "Memória de reserva (swap)" "Veja o log." garante_swap
   passo firewall "Firewall (SSH, 80 e 443)" "Confira com: ufw status" firewall
   passo agente_codigo "$(ia_nome)" "Veja o log." instala_agente_codigo
   passo segredos "Senhas e chaves" "Veja o log." --sem-repetir gera_segredos

@@ -29,7 +29,6 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe)
     # A API só responde saudável na versão anterior quando o cenário é o da versão quebrada.
     espera_url() { [ "$quebrada" = 0 ] || [ "$(env_get ASIMOV_VERSAO)" = v0.0.1 ]; }
     tela_instalacao() { echo "tela_instalacao" >>"$dir/dc.log"; }
-    acesso_confere() { return 0; }
     atualiza_plataforma
   ) >"$dir/saida.log" 2>&1 || resultado=$?
 

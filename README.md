@@ -47,9 +47,8 @@ Hoje, para ter um agente de IA atendendo no WhatsApp, a maioria instala várias 
 
 ## Antes de começar
 
-- VPS com **Ubuntu 24.04**, acesso root por SSH, pelo menos **2 GB de RAM** e **20 GB livres** (amd64 ou arm64)
+- VPS com **Ubuntu 24.04**, acesso root por SSH, pelo menos **2 GB de RAM** e **20 GB livres**; **4 GB** se for usar o WhatsApp pela WAHA junto com o copiloto (amd64 ou arm64)
 - Um **domínio** onde você consiga criar registros DNS
-- O **token de acesso** que você recebe da Asimov Academy na trilha
 - Chave de API de pelo menos um provedor: **OpenAI, Anthropic, Gemini ou Groq**
 - Conforme o canal escolhido:
   - **Chatwoot:** acesso de administrador
@@ -72,10 +71,9 @@ O instalador pergunta, nesta ordem:
 3. Onde está sua VPS: **Oracle Cloud** ou **outro provedor**
 4. Claude Code ou Codex para o copiloto
 5. O registro DNS `bot.<seu-domínio>` (ele mostra o IP e espera propagar)
-6. Seu usuário e o token de acesso às imagens da plataforma
-7. Se quer entrar na sua conta do assistente agora, ou depois com `asimov ia`
-8. Se quer o painel em `app.<seu-domínio>`
-9. O canal do primeiro agente e a IA que responde por ele
+6. Se quer entrar na sua conta do assistente agora, ou depois com `asimov ia`
+7. Se quer o painel em `app.<seu-domínio>`
+8. O canal do primeiro agente e a IA que responde por ele
 
 > [!TIP]
 > Se algo falhar, ele mostra o motivo. Rode o mesmo comando de novo e ele continua de onde parou.
@@ -99,7 +97,6 @@ Depois de instalar, tudo passa pelo comando `asimov`:
 | `asimov handoff` | Troca quem recebe a conversa passada pelo agente |
 | `asimov painel` | Liga ou desliga o painel e gera o código do primeiro acesso |
 | `asimov ia` | Entra na sua conta do Claude Code ou do Codex |
-| `asimov token` | Troca o token de acesso às imagens da plataforma |
 | `asimov diagnostico` | Mostra a versão instalada e se cada endereço está respondendo |
 | `asimov atualizar` | Baixa a versão nova e reinicia |
 

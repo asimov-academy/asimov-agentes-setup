@@ -51,9 +51,6 @@ atualiza_plataforma() {
     return 0
   fi
 
-  # Token vencido se resolve antes de mexer em qualquer coisa: pull recusado no meio da troca
-  # pareceria versão quebrada e dispararia a volta à toa.
-  tela_acesso
   secao "Atualização"
   info "De $(destaque "$anterior") para $(destaque "v$VERSAO"). A plataforma fica fora do ar por alguns segundos."
   echo

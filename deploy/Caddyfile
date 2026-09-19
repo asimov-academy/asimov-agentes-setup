@@ -1,0 +1,21 @@
+{
+	email {$EMAIL_SSL}
+}
+
+{$SUBDOMINIO_BOT} {
+	# Só webhooks, health e o que a Meta exige para publicar o app (a URL da política de
+	# privacidade e o ícone) ficam públicos. /admin responde apenas em 127.0.0.1:8000.
+	@publico path /health /webhook/* /privacidade* /icone-app.png
+	handle @publico {
+		reverse_proxy api:8000
+	}
+	handle {
+		respond 404
+	}
+}
+
+# Painel do operador, quando ele escolhe administrar pelo navegador. O arquivo existe sempre (um
+# glob que não casa nada é erro no Caddy) e só tem um comentário enquanto o painel está desligado.
+# Quem escreve é setup/lib/painel.sh, e depois roda `caddy reload`: mudar um arquivo montado não
+# muda o que o Caddy já carregou.
+import /etc/caddy/extras/*.caddy

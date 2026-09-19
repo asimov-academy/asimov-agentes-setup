@@ -1,0 +1,78 @@
+LICENÇA DE USO DO ASIMOV AGENTES
+
+Copyright (c) 2026 Asimov Academy. Todos os direitos reservados.
+
+RASCUNHO: texto pendente de validação jurídica.
+
+1. O que esta licença cobre
+
+Esta licença cobre o instalador publicado neste repositório e a plataforma Asimov Agentes que ele
+instala, incluindo as imagens Docker distribuídas pela Asimov Academy (juntos, o "Software"). O
+Software é licenciado, não vendido. A Asimov Academy mantém todos os direitos de propriedade
+intelectual sobre ele.
+
+2. Quem pode usar
+
+Pode usar o Software quem é aluno ativo da Asimov Academy com acesso à trilha de que o Software faz
+parte, ou quem tem autorização escrita da Asimov Academy (o "Licenciado"). A licença é pessoal,
+não exclusiva, intransferível e revogável.
+
+3. O que é permitido
+
+a) Instalar e rodar o Software em servidores sob controle do Licenciado.
+b) Usar o Software para atender os clientes do próprio negócio do Licenciado.
+c) Usar o Software para prestar serviço de atendimento a empresas clientes do Licenciado, desde que
+   a instalação continue sob controle do Licenciado.
+d) Alterar os arquivos de configuração, os prompts e os modelos de texto que o Software entrega
+   para serem alterados.
+
+4. O que não é permitido
+
+a) Redistribuir, revender, sublicenciar, alugar ou publicar o Software, inteiro ou em parte,
+   incluindo as imagens Docker e as credenciais de acesso a elas.
+b) Compartilhar com terceiros o token de acesso às imagens recebido da Asimov Academy.
+c) Fazer engenharia reversa, descompilar ou extrair o código das imagens Docker, salvo no limite
+   em que a lei aplicável não permita essa restrição.
+d) Remover ou alterar avisos de autoria, de marca ou desta licença.
+e) Usar o nome ou as marcas da Asimov Academy para promover produto ou serviço próprio sem
+   autorização escrita.
+f) Oferecer o Software a terceiros como produto próprio ou como plataforma concorrente.
+
+5. Componentes de terceiros
+
+O Software instala e usa componentes de terceiros (por exemplo Docker, PostgreSQL, Redis, Caddy e
+WAHA), cada um sob a própria licença, que prevalece sobre esta quanto ao componente. O uso de
+serviços de terceiros (provedores de IA, Meta, WhatsApp, Chatwoot) segue os termos de cada serviço,
+e cumprir esses termos é responsabilidade do Licenciado.
+
+6. Dados e responsabilidade pelo uso
+
+O Software roda em infraestrutura do Licenciado. O Licenciado é o responsável pelos dados tratados
+na sua instalação, inclusive perante a Lei Geral de Proteção de Dados (Lei 13.709/2018), e pelo
+conteúdo das mensagens enviadas pelos seus agentes.
+
+7. Sem garantia
+
+O Software é fornecido "no estado em que se encontra", sem garantia de qualquer tipo, expressa ou
+implícita, incluindo garantias de comercialização, de adequação a um fim específico e de
+funcionamento ininterrupto. Atualizações e suporte são oferecidos a critério da Asimov Academy.
+
+8. Limitação de responsabilidade
+
+No limite máximo permitido pela lei, a Asimov Academy não responde por danos indiretos, lucros
+cessantes, perda de dados, bloqueio de números ou de contas em serviços de terceiros, nem por
+qualquer dano decorrente do uso ou da impossibilidade de uso do Software.
+
+9. Término
+
+Esta licença termina automaticamente se o Licenciado descumprir qualquer cláusula, e pode ser
+encerrada pela Asimov Academy com o fim do vínculo que deu origem a ela. Com o término, o
+Licenciado deve parar de usar o Software e apagar as cópias e as credenciais de acesso. A Asimov
+Academy pode revogar o token de acesso às imagens a qualquer momento.
+
+10. Lei e foro
+
+Esta licença é regida pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca
+da sede da Asimov Academy para resolver qualquer questão decorrente dela.
+
+Contato: https://asimov.academy

@@ -1,0 +1,29 @@
+# O instalador não tem código da aplicação para testar: aqui roda o shellcheck e as simulações do
+# onboarding e da atualização, com rede, DNS, Docker e API de mentira.
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  setup:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Shellcheck
+        run: |
+          uvx --from shellcheck-py shellcheck -x -P SCRIPTDIR \
+            install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh
+      - name: Onboarding simulado
+        run: ASIMOV_TTY=setup/testes/respostas.txt bash setup/testes/simula_onboarding.sh
+      - name: Atualização simulada, com volta de versão
+        run: bash setup/testes/simula_atualizacao.sh
+      - name: Nada de código da aplicação
+        run: |
+          for pasta in backend frontend spec painel .claude; do
+            [ ! -e "$pasta" ] || { echo "$pasta não pode existir neste repositório"; exit 1; }
+          done
+          ! grep -rn "build:" deploy/docker-compose.yml

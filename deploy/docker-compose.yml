@@ -1,0 +1,139 @@
+# Sempre chamado pelo `dc` de deploy/compose.sh, que passa o projeto, o .env e este arquivo.
+# Nada é construído na VPS: as imagens vêm prontas do registro (ASIMOV_REGISTRO, GHCR por padrão), na versão gravada em ASIMOV_VERSAO
+# pelo setup. Sem a variável o Compose para com erro, de propósito: `latest` na VPS faria duas
+# instalações iguais rodarem versões diferentes.
+
+x-backend: &backend
+  image: ${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}
+  env_file: ../.env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379/0
+    DIRETORIO_PROMPTS: /app/prompts
+    DIRETORIO_MODELOS: /app/modelos
+    DIRETORIO_MIDIA: /var/lib/asimov/midia
+  volumes:
+    - ../prompts:/app/prompts
+    - ../modelos:/app/modelos:ro
+    - midia:/var/lib/asimov/midia
+    - conhecimento:/var/lib/asimov/conhecimento
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    <<: *backend
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  worker:
+    <<: *backend
+    command: ["arq", "app.worker.Configuracao"]
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SUBDOMINIO_BOT: ${SUBDOMINIO_BOT}
+      EMAIL_SSL: ${EMAIL_SSL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Bloco do painel, escrito pelo setup quando o operador liga app.<dominio>.
+      - ./caddy:/etc/caddy/extras:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # Copiloto do painel. Sobe só depois de `asimov ia` vincular a conta (perfil `copiloto`,
+  # COPILOTO_ATIVO=1 no .env, lido pelo `dc`). Sem porta publicada: quem fala com ele é a API,
+  # pela fila do Redis. A pasta de credencial do CLI vem do host, com escrita, porque o CLI
+  # renova o próprio login sozinho; nenhum segredo dela passa pelo .env nem pelo banco.
+  copiloto:
+    <<: *backend
+    profiles: ["copiloto"]
+    # Uma imagem por CLI: o nome termina no valor de AGENTE_CODIGO (claude_code ou codex).
+    image: ${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-copiloto-${AGENTE_CODIGO:-claude_code}:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}
+    command: ["arq", "app.copiloto.worker.Configuracao"]
+    # Com o dono da credencial, não com o usuário da imagem: o login do operador é 600 do dono
+    # dele (root, em quase toda VPS), e outro uid não conseguiria nem abrir o arquivo.
+    user: "${CREDENCIAL_IA_UID:-1000}:${CREDENCIAL_IA_GID:-1000}"
+    volumes:
+      - ../prompts:/app/prompts
+      - ../modelos:/app/modelos:ro
+      - midia:/var/lib/asimov/midia
+      # Os padrões existem só para o arquivo continuar válido em quem nunca vinculou conta: o
+      # serviço nem entra no Compose sem o perfil, e o par de verdade vem do .env.
+      - ${CREDENCIAL_IA_HOST:-../modelos}:${CREDENCIAL_IA_CONTAINER:-/tmp/sem-credencial}:rw
+      # O Claude Code guarda o estado do primeiro uso fora da pasta da credencial, num arquivo só.
+      - ${CONFIG_IA_HOST:-../modelos/privacidade.html}:${CONFIG_IA_CONTAINER:-/tmp/sem-config-ia}:rw
+
+  # WhatsApp pela WAHA. Sobe com o resto da plataforma, na instalação: sem isso, ligar o WhatsApp
+  # pelo painel esbarrava num contêiner que só o terminal sabia subir. Sem porta publicada: quem
+  # fala com ela é a API, pela rede do Compose. O volume guarda o pareamento do número.
+  waha:
+    # Imagem só com a engine GOWS (menor). setup/lib/waha.sh grava a tag arm quando a VPS é arm.
+    image: devlikeapro/waha:${VERSAO_WAHA:-gows-2026.8.2}
+    environment:
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      # Endereço com que a WAHA monta o `media.url` dos webhooks. Sem isso ela anuncia
+      # `localhost`, que dentro do contêiner do worker é o próprio worker.
+      WAHA_BASE_URL: http://waha:3000
+      WAHA_DASHBOARD_ENABLED: "false"
+      WHATSAPP_SWAGGER_ENABLED: "false"
+      # Nome que aparece em Aparelhos conectados no celular. `Desktop` no GOWS mostra só o nome,
+      # sem "Firefox" na frente. O setup grava o nome do agente antes de cada pareamento.
+      WAHA_CLIENT_DEVICE_NAME: ${WAHA_CLIENT_DEVICE_NAME:-Asimov Agentes}
+      WAHA_CLIENT_BROWSER_NAME: ${WAHA_CLIENT_BROWSER_NAME:-Desktop}
+      WAHA_EVENTS_DOWNLOAD_MEDIA: "true"
+      WAHA_API_DOWNLOAD_MEDIA: "true"
+      # O arquivo precisa durar do webhook até o fim do turno (buffer, fila e lock de 240 s).
+      WHATSAPP_FILES_LIFETIME: "3600"
+      TZ: America/Sao_Paulo
+    volumes:
+      - waha_sessoes:/app/.sessions
+      - waha_arquivos:/app/.media
+    restart: unless-stopped
+
+volumes:
+  postgres:
+  midia:
+  conhecimento:
+  waha_sessoes:
+  waha_arquivos:
+  redis:
+  caddy_data:
+  caddy_config:

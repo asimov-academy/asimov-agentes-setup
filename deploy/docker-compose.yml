@@ -4,9 +4,9 @@
 # instalações iguais rodarem versões diferentes.
 
 x-backend: &backend
-  image: ${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}
+  image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
   env_file: ../.env
-  environment:
+  environment: &backend-env
     DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     REDIS_URL: redis://redis:6379/0
     DIRETORIO_PROMPTS: /app/prompts
@@ -50,14 +50,33 @@ services:
       retries: 20
     restart: unless-stopped
 
+  # O painel nunca sobe aqui: a imagem pública não leva o front. PAINEL_ATIVO fixo e vazio vence o
+  # do .env, então /painel/api não existe nesta API mesmo com o painel ligado.
   api:
     <<: *backend
+    environment:
+      <<: *backend-env
+      PAINEL_ATIVO: ""
     ports:
       - "127.0.0.1:8000:8000"
 
   worker:
     <<: *backend
+    environment:
+      <<: *backend-env
+      PAINEL_ATIVO: ""
     command: ["arq", "app.worker.Configuracao"]
+
+  # Painel do operador em app.<dominio>. Imagem privada, a única com o front dentro, aberta pelo
+  # token da trilha (setup/lib/acesso.sh). Sobe pelo perfil `painel`, ligado por PAINEL_ATIVO=1 no
+  # .env e lido pelo `dc`. Sem porta publicada: quem fala com ele é o Caddy, pela rede do Compose.
+  painel:
+    <<: *backend
+    profiles: ["painel"]
+    image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-painel:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
+    environment:
+      <<: *backend-env
+      PAINEL_ATIVO: "1"
 
   caddy:
     image: caddy:2-alpine
@@ -85,7 +104,7 @@ services:
     <<: *backend
     profiles: ["copiloto"]
     # Uma imagem por CLI: o nome termina no valor de AGENTE_CODIGO (claude_code ou codex).
-    image: ${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-copiloto-${AGENTE_CODIGO:-claude_code}:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}
+    image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-copiloto-${AGENTE_CODIGO:-claude_code}:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
     command: ["arq", "app.copiloto.worker.Configuracao"]
     # Com o dono da credencial, não com o usuário da imagem: o login do operador é 600 do dono
     # dele (root, em quase toda VPS), e outro uid não conseguiria nem abrir o arquivo.

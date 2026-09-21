@@ -169,3 +169,20 @@ printf 'IA_VINCULADA=%s\n' "$(env_get IA_VINCULADA)"
 # Aqui responde "não", que é o caminho que não depende de DNS nem de contêiner.
 estado_remove painel_perguntado
 tela_painel_oferta
+
+# Token da trilha: sem token guardado a tela pergunta, recusa o errado e aceita o certo. O `docker`
+# é de mentira aqui; SUDO vazio porque o teste não roda como root e não existe sudo na simulação.
+SUDO=""
+# O token vai para arquivo, e não para variável: o `docker login` roda no fim de um pipe, ou seja,
+# num subshell, e variável atribuída lá não volta para quem chamou.
+docker() {
+  case "$*" in
+    *login*) cat >"$DIR/token_visto" ;;
+    *"manifest inspect"*) [ "$(cat "$DIR/token_visto" 2>/dev/null)" = token-bom ] ;;
+    *) : ;;
+  esac
+}
+acesso_garante && printf 'acesso liberado com o token certo\n'
+# Com o token guardado, a segunda vez não pergunta nada.
+acesso_garante && printf 'segunda vez sem perguntar\n'
+printf 'imagem do painel: %s\n' "$(imagem_painel)"

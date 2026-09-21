@@ -110,3 +110,7 @@ n
 2
 s
 n
+s
+token-errado
+s
+token-bom

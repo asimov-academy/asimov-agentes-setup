@@ -9,14 +9,31 @@ revisao_do_banco() {
 }
 
 # sobe_versao: tudo o que pode dar errado numa versão nova, numa função só, para ter uma volta só.
+# Só imagem pública aqui: token vencido não pode desfazer a atualização da plataforma inteira.
 sobe_versao() {
-  local perfil=()
-  grep -q '^COPILOTO_ATIVO=1$' "$ARQ_ENV" 2>/dev/null && perfil=(copiloto)
-  dc pull api worker "${perfil[@]}" &&
+  dc pull api worker &&
     migra &&
     sobe_servicos &&
-    { [ "${#perfil[@]}" -eq 0 ] || dc up -d copiloto; } &&
     espera_url http://127.0.0.1:8000/health 24
+}
+
+# atualiza_privadas: painel e copiloto, que vêm de imagem privada. Roda depois de a plataforma
+# estar de pé e nunca desfaz nada: sem token válido, o painel fica na versão anterior e o operador
+# resolve com `asimov token`. A plataforma no terminal segue na versão nova.
+atualiza_privadas() {
+  painel_ligado || return 0
+  if ! dc pull painel >>"$LOG" 2>&1; then
+    aviso "Token vencido ou trocado: o painel ficou na versão anterior."
+    dica "Rode $(destaque "asimov token") e depois $(destaque "asimov atualizar") de novo."
+    return 0
+  fi
+  dc up -d --force-recreate painel >>"$LOG" 2>&1 || true
+  grep -q '^COPILOTO_ATIVO=1$' "$ARQ_ENV" 2>/dev/null || return 0
+  if dc pull copiloto >>"$LOG" 2>&1; then
+    dc up -d --force-recreate copiloto >>"$LOG" 2>&1 || true
+  else
+    aviso "O copiloto ficou na versão anterior: o registro recusou o token."
+  fi
 }
 
 # volta_versao ANTERIOR REVISAO: imagens, banco e arquivos do setup de volta ao que estava no ar.
@@ -71,6 +88,7 @@ atualiza_plataforma() {
   fi
   printf '\r\033[K'
   ok "Versão $(destaque "v$VERSAO") no ar."
+  atualiza_privadas
   echo
   # O que já foi feito aqui não repete na tela de instalação, que confere o resto (HTTPS, WAHA, backup).
   local passo_feito

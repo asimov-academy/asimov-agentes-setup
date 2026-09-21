@@ -18,6 +18,7 @@ ajuda() {
   printf '    %shandoff%s       troca quem recebe a conversa passada pelo agente\n' "$CIANO" "$NORMAL"
   printf '    %spainel%s        liga ou desliga o painel no navegador e gera o código de acesso\n' "$CIANO" "$NORMAL"
   printf '    %sia%s            entra na conta do Claude Code ou do Codex e liga o copiloto do painel\n' "$CIANO" "$NORMAL"
+  printf '    %stoken%s         troca o token da trilha, que abre a imagem do painel\n' "$CIANO" "$NORMAL"
   printf '    %sdiagnostico%s   mostra versão e o que está respondendo\n' "$CIANO" "$NORMAL"
   printf '    %satualizar%s     baixa a versão nova e reinicia\n' "$CIANO" "$NORMAL"
   echo
@@ -49,6 +50,7 @@ case "${1:-menu}" in
   handoff) roda fluxo_handoff ;;
   painel) roda fluxo_painel ;;
   ia) roda fluxo_vinculo ;;
+  token) roda fluxo_token ;;
   diagnostico | diagnóstico) roda fluxo_diagnostico ;;
   atualizar)
     # O install.sh local tem fixa a versão já instalada: baixa o da main.

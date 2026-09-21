@@ -97,6 +97,7 @@ Depois de instalar, tudo passa pelo comando `asimov`:
 | `asimov handoff` | Troca quem recebe a conversa passada pelo agente |
 | `asimov painel` | Liga ou desliga o painel e gera o código do primeiro acesso |
 | `asimov ia` | Entra na sua conta do Claude Code ou do Codex |
+| `asimov token` | Troca o token da trilha, que abre a imagem do painel |
 | `asimov diagnostico` | Mostra a versão instalada e se cada endereço está respondendo |
 | `asimov atualizar` | Baixa a versão nova e reinicia |
 
@@ -104,7 +105,9 @@ Depois de instalar, tudo passa pelo comando `asimov`:
 
 ## Painel
 
-Ligue com `asimov painel`. Ele pede o registro DNS de `app.<seu-domínio>` e mostra um código de uso único para você criar a senha no primeiro acesso.
+Tudo o que está acima funciona pelo terminal, sem token nenhum. O painel no navegador faz parte da trilha de agentes da Asimov Academy: a imagem dele é privada, e o token vem no material do curso.
+
+Ligue com `asimov painel`. Ele pede o token da trilha, o registro DNS de `app.<seu-domínio>` e mostra um código de uso único para você criar a senha no primeiro acesso. O token fica guardado na credencial do Docker, nunca no `.env`; `asimov token` troca quando ele é rotacionado.
 
 | Tela | O que faz |
 |---|---|

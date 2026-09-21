@@ -104,6 +104,8 @@ sobe_banco() { dc up -d --wait postgres redis; }
 migra() { dc run --rm api alembic upgrade head; }
 sobe_servicos() {
   dc up -d api worker caddy
+  # Sem isto, `asimov atualizar` deixava o painel no contêiner da versão anterior.
+  painel_ligado && dc up -d --force-recreate painel >>"$LOG" 2>&1
   # O Caddyfile é montado, então atualizar o projeto muda o arquivo mas não o que o Caddy já
   # carregou: caminho público novo continuava respondendo 404 depois de `asimov atualizar`.
   # `reload` não derruba conexão; se ele falhar (contêiner recém-criado, por exemplo), reinicia.

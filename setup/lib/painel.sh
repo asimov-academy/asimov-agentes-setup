@@ -2,8 +2,11 @@
 # Painel do operador no navegador, em app.<dominio>.
 #
 # Nasce desligado: quem prefere o terminal segue com `asimov` e nada muda na instalação. Ligar
-# escreve o bloco do Caddy em deploy/caddy/painel.caddy, liga PAINEL_ATIVO no .env e reinicia a API,
-# que é quem monta as telas.
+# escreve o bloco do Caddy em deploy/caddy/painel.caddy, liga PAINEL_ATIVO no .env e sobe o serviço
+# `painel`, que roda a imagem privada com o front dentro. A API nunca monta as telas do painel.
+#
+# A imagem do painel é a parte paga: quem liga passa por setup/lib/acesso.sh, que pede o token da
+# trilha. Sem token, esta tela explica e sai; o resto da plataforma segue inteiro.
 #
 # O primeiro acesso exige um código de uso único mostrado aqui: quem tem a VPS é quem vira dono do
 # painel, não quem descobrir o endereço primeiro.
@@ -36,7 +39,7 @@ $sub {
 	}
 	redir / /painel 302
 	handle {
-		reverse_proxy api:8000
+		reverse_proxy painel:8000
 	}
 }
 CADDY
@@ -49,8 +52,18 @@ painel_recarrega_caddy() {
     dc restart caddy >>"$LOG" 2>&1 || true
 }
 
-# A API monta as telas do painel no boot, lendo PAINEL_ATIVO: ligar ou desligar pede recriar.
-painel_reinicia_api() { dc up -d --force-recreate api >>"$LOG" 2>&1; }
+# Quem monta as telas do painel é o serviço `painel`, num contêiner à parte com a imagem privada.
+# O perfil dele só entra no `dc` com PAINEL_ATIVO=1 no .env, então `env_set` vem antes daqui.
+painel_sobe() {
+  dc pull painel >>"$LOG" 2>&1 || return 1
+  dc up -d --force-recreate painel >>"$LOG" 2>&1
+}
+
+# Desligar tira o perfil do `dc`: sem derrubar na mão, o contêiner ficaria no ar servindo app.<dom>.
+painel_derruba() {
+  dc stop painel >>"$LOG" 2>&1 || true
+  dc rm -f painel >>"$LOG" 2>&1 || true
+}
 
 painel_espera_dns() {
   local sub=$1 dominio=$2 ip resolvido resposta anterior=""
@@ -137,6 +150,12 @@ painel_liga() {
   [ -n "$dominio" ] || erro_fatal "Sem domínio na instalação" "Rode o setup de novo."
 
   secao "Ligar o painel"
+  # Token antes do DNS: não faz sentido esperar um registro propagar para descobrir que falta token.
+  if ! acesso_garante; then
+    dica "Quando tiver o token: asimov painel"
+    return 0
+  fi
+  echo
   dica "Subdomínio do painel. Com app, ele fica em app.$dominio; pode colar do jeito que estiver."
   while true; do
     pergunta nome "Subdomínio do painel" "app"
@@ -162,10 +181,10 @@ painel_liga() {
   env_set SUBDOMINIO_APP "$sub"
   env_set PAINEL_ATIVO 1
   painel_escreve_caddy "$sub"
-  printf '  %sSubindo…%s' "$CINZA" "$NORMAL"
-  if ! painel_reinicia_api; then
+  printf '  %sBaixando e subindo o painel…%s' "$CINZA" "$NORMAL"
+  if ! painel_sobe; then
     printf '\r\033[K'
-    falha "A API não reiniciou com o painel ligado. Veja o log: $LOG"
+    falha "O painel não subiu. Veja o log: $LOG"
     return 1
   fi
   painel_recarrega_caddy
@@ -185,11 +204,12 @@ painel_liga() {
 
 painel_desliga() {
   confirma "Desligar o painel? O endereço para de responder e a conta continua guardada." || return 0
-  env_set PAINEL_ATIVO ""
-  painel_escreve_caddy ""
   copiloto_desce
   printf '  %sAplicando…%s' "$CINZA" "$NORMAL"
-  painel_reinicia_api
+  # Derruba antes de apagar PAINEL_ATIVO: sem o perfil, o `dc` nem enxerga mais o serviço.
+  painel_derruba
+  env_set PAINEL_ATIVO ""
+  painel_escreve_caddy ""
   painel_recarrega_caddy
   printf '\r\033[K'
   ok "Painel desligado. A administração segue pelo terminal."
@@ -215,7 +235,8 @@ fluxo_painel() {
     secao "Painel"
     info "Hoje a administração é pelo terminal."
     echo
-    confirma "Quer ligar o painel no navegador?" || return 0
+    acesso_explica_trilha
+    confirma "Quer ligar o painel no navegador?" false || return 0
     painel_liga
     return 0
   fi
@@ -229,8 +250,8 @@ fluxo_painel() {
   campo "Acesso" "$([ "$tem_conta" = true ] && echo "conta criada" || echo "ainda sem conta: use um código")"
   echo
 
-  rotulos=("Gerar código de acesso" "Apagar a conta e criar outra senha" "Desligar o painel" "Voltar")
-  acoes=(painel_mostra_codigo painel_esquece_senha painel_desliga)
+  rotulos=("Gerar código de acesso" "Apagar a conta e criar outra senha" "Trocar o token da trilha" "Desligar o painel" "Voltar")
+  acoes=(painel_mostra_codigo painel_esquece_senha fluxo_token painel_desliga)
   ESC_ESCOLHE=${#rotulos[@]} escolha op "O que fazer?" "${rotulos[@]}"
   [ "$op" -lt "${#rotulos[@]}" ] || return 0
   "${acoes[$((op - 1))]}"
@@ -249,10 +270,12 @@ tela_painel_oferta() {
   info "A plataforma está no ar. O painel administra agentes, canais, conversas e consumo pelo"
   info "navegador, no computador e no celular, com passo a passo para criar agente."
   echo
+  acesso_explica_trilha
   aviso "Precisa de um registro DNS novo: $(destaque "app.$(env_get DOMINIO_BASE)") apontando para o IP $(destaque "${ip:-desta VPS}")."
   echo
 
-  if confirma "Ligar o painel agora?"; then
+  # Padrão Não: quem chega pelo workshop gratuito não tem token, e Enter segue sem painel.
+  if confirma "Ligar o painel agora?" false; then
     # Falha aqui (API ou contêiner) não pode derrubar a instalação: avisa e segue para o fim.
     painel_liga || aviso "O painel não terminou de ligar. Rode $(destaque "asimov painel") para conferir e gerar o código."
     # A próxima tela limpa o terminal: sem esta pausa o código de primeiro acesso sumia antes de

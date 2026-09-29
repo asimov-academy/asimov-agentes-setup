@@ -21,6 +21,7 @@ ajuda() {
   printf '    %stoken%s         troca o token da trilha, que abre a imagem do painel\n' "$CIANO" "$NORMAL"
   printf '    %sdiagnostico%s   mostra versão e o que está respondendo\n' "$CIANO" "$NORMAL"
   printf '    %satualizar%s     baixa a versão nova e reinicia\n' "$CIANO" "$NORMAL"
+  printf '    %sdesinstalar%s   remove da VPS tudo o que o Asimov instalou\n' "$CIANO" "$NORMAL"
   echo
 }
 
@@ -58,6 +59,11 @@ case "${1:-menu}" in
     curl -fsSL "$URL_INSTALL" -o "$DIR_ESTADO/install.sh" \
       || erro_fatal "Não consegui baixar o instalador" "Confira a internet da VPS e rode asimov atualizar de novo."
     ASIMOV_ATUALIZAR=1 exec bash "$DIR_ESTADO/install.sh"
+    ;;
+  desinstalar)
+    # Sem `roda`: instalação que parou no meio também precisa conseguir sair.
+    com_voltar fluxo_desinstalar
+    [ "$FALHOU" = 0 ] || exit 1
     ;;
   *)
     ajuda

@@ -19,6 +19,7 @@ garante_swap() {
 }
 
 firewall() {
+  [ "$(estado_get configurar_firewall)" = sim ] || return 0
   local porta
   # Libera a porta real do SSH antes de ligar o firewall, para não trancar o operador fora.
   for porta in $($SUDO ss -tlnpH 2>/dev/null | awk '/sshd/ {n=split($4,a,":"); print a[n]}' | sort -u); do
@@ -103,14 +104,14 @@ baixa_imagens() {
 sobe_banco() { dc up -d --wait postgres redis; }
 migra() { dc run --rm api alembic upgrade head; }
 sobe_servicos() {
-  dc up -d api worker caddy
+  dc up -d api worker caddy || return 1
   # Sem isto, `asimov atualizar` deixava o painel no contêiner da versão anterior.
-  painel_ligado && dc up -d --force-recreate painel >>"$LOG" 2>&1
+  if painel_ligado; then dc up -d --force-recreate painel >>"$LOG" 2>&1 || return 1; fi
   # O Caddyfile é montado, então atualizar o projeto muda o arquivo mas não o que o Caddy já
   # carregou: caminho público novo continuava respondendo 404 depois de `asimov atualizar`.
   # `reload` não derruba conexão; se ele falhar (contêiner recém-criado, por exemplo), reinicia.
   dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1 ||
-    dc restart caddy >>"$LOG" 2>&1 || true
+    return 1
 }
 
 espera_url() {
@@ -194,6 +195,16 @@ tela_instalacao() {
 
   confere_maquina
   confere_proxy_do_dns
+  if ! estado_tem configurar_firewall; then
+    info "Por padrão, o firewall existente é preservado. Libere HTTPS também no provedor da VPS."
+    if confirma "Autorizar o setup a configurar e ativar UFW nesta VPS?" false; then
+      estado_set configurar_firewall sim
+      estado_remove passo_firewall
+    else
+      estado_set configurar_firewall nao
+    fi
+  fi
+  if painel_ligado; then painel_escreve_caddy "$(env_get SUBDOMINIO_APP)"; fi
   passo swap "Memória de reserva (swap)" "Veja o log." garante_swap
   passo firewall "Firewall (SSH, 80 e 443)" "Confira com: ufw status" firewall
   passo agente_codigo "$(ia_nome)" "Veja o log." instala_agente_codigo
@@ -204,10 +215,11 @@ tela_instalacao() {
   passo migracoes "Tabelas do banco" "Veja o log." migra
   passo servicos "API, worker e HTTPS" "Veja o log." sobe_servicos
   passo api_local "API respondendo" "Veja: source deploy/compose.sh && dc logs api" \
-    --sem-repetir espera_url http://127.0.0.1:8000/health 24
-  passo api_https "Certificado SSL em $sub" \
-    "Confira se as portas 80 e 443 estão livres e se o domínio aponta para a VPS." \
-    --sem-repetir espera_url "https://$sub/health" 36
+    --sem-repetir confere_api_local
+  configura_proxy_externo
+  passo api_https "HTTPS e API pública em $sub" \
+    "Confira o diagnóstico em $LOG. O progresso está salvo; rode novamente para retomar." \
+    --sem-repetir confere_https "$sub"
   # Depois de a API responder: `sobe_waha` avisa a plataforma da manutenção antes de mexer no
   # contêiner. A WAHA entra na instalação porque o painel não sabe subir contêiner nenhum.
   passo whatsapp "WhatsApp na VPS (WAHA)" \

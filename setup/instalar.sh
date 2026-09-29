@@ -31,6 +31,10 @@ atualiza() {
 
 principal() {
   estado_iniciar
+  trava_instalacao
+  estado_tem instalacao_concluida || tela_boas_vindas
+  inventario_instalacao
+  prepara_rede
   estado_nova_versao
   printf '\n===== setup %s iniciado em %s =====\n' "$VERSAO" "$(date -Is)" >>"$LOG"
 

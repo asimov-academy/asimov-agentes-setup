@@ -16,11 +16,20 @@ jobs:
       - name: Shellcheck
         run: |
           uvx --from shellcheck-py shellcheck -x -P SCRIPTDIR \
-            install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh
+            install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh setup/testes/simula_retomada.sh setup/testes/caddy_real.sh
       - name: Onboarding simulado
         run: ASIMOV_TTY=setup/testes/respostas.txt bash setup/testes/simula_onboarding.sh
       - name: Atualização simulada, com volta de versão
         run: bash setup/testes/simula_atualizacao.sh
+      - name: Retomada, portas ocupadas e preservação do proxy
+        run: bash setup/testes/simula_retomada.sh
+      - name: Queda de conexão e reconexão real em tmux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux
+          python3 setup/testes/test_sessao.py
+      - name: Gateway com Caddy real
+        run: bash setup/testes/caddy_real.sh
       - name: Nada de código da aplicação
         run: |
           for pasta in backend frontend spec painel .claude; do

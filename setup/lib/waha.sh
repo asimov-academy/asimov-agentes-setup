@@ -76,7 +76,7 @@ garante_waha() {
     "Veja: source deploy/compose.sh && dc logs api" --sem-repetir sobe_api
   # A API acabou de ser recriada para enxergar a chave da WAHA: espera ela responder de novo,
   # senão a primeira chamada do fluxo do agente cai em cima de uma API que ainda está subindo.
-  espera_url http://127.0.0.1:8000/health 24 >/dev/null 2>&1 || true
+  espera_url "${API_LOCAL:-http://127.0.0.1:8000}/health" 24 >/dev/null 2>&1 || true
   # Os passos valem só para esta subida: o contêiner pode ser removido e precisar subir de novo.
   estado_remove passo_qrencode_waha passo_waha_container passo_waha_api
   # Versão da WAHA envelhece rápido: o WhatsApp muda o protocolo e a imagem antiga para de conectar.

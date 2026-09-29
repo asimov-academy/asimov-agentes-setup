@@ -14,7 +14,7 @@ sobe_versao() {
   dc pull api worker &&
     migra &&
     sobe_servicos &&
-    espera_url http://127.0.0.1:8000/health 24
+    espera_url "${API_LOCAL:-http://127.0.0.1:8000}/health" 24
 }
 
 # atualiza_privadas: painel e copiloto, que vêm de imagem privada. Roda depois de a plataforma
@@ -79,7 +79,7 @@ atualiza_plataforma() {
     printf '\r\033[K'
     falha "A versão v$VERSAO não subiu saudável. Voltando para $anterior."
     volta_versao "$anterior" "$revisao"
-    if espera_url http://127.0.0.1:8000/health 24 >>"$LOG" 2>&1; then
+    if espera_url "${API_LOCAL:-http://127.0.0.1:8000}/health" 24 >>"$LOG" 2>&1; then
       ok "Plataforma de volta em $(destaque "$anterior"), respondendo."
     else
       falha "A versão anterior também não respondeu."

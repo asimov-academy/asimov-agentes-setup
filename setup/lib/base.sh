@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034  # variáveis usadas pelas telas e pelo comando asimov
 # Caminhos, versão, sudo e bibliotecas. Carregado por setup/instalar.sh e setup/asimov.sh.
 
-VERSAO="0.32.1"
+VERSAO="0.33.0"
 # O instalador da main aponta sempre para a última versão marcada.
 URL_INSTALL="https://raw.githubusercontent.com/asimov-academy/asimov-agentes-setup/main/install.sh"
 
@@ -10,7 +10,7 @@ URL_INSTALL="https://raw.githubusercontent.com/asimov-academy/asimov-agentes-set
 if locale -a 2>/dev/null | grep -qi '^c\.utf-\?8$'; then
   export LC_ALL=C.UTF-8
 fi
-DIR_ESTADO="$HOME/.asimov"
+DIR_ESTADO="${ASIMOV_ESTADO_DIR:-$HOME/.asimov}"
 ARQ_ESTADO="$DIR_ESTADO/estado"
 ARQ_ENV="$RAIZ_PROJETO/.env"
 LOG="$DIR_ESTADO/setup.log"
@@ -29,6 +29,10 @@ DIR_LIB="$RAIZ_PROJETO/setup/lib"
 source "$DIR_LIB/ui.sh"
 # shellcheck source=setup/lib/estado.sh
 source "$DIR_LIB/estado.sh"
+# shellcheck source=setup/lib/retomada.sh
+source "$DIR_LIB/retomada.sh"
+# shellcheck source=setup/lib/proxy.sh
+source "$DIR_LIB/proxy.sh"
 # shellcheck source=setup/lib/sistema.sh
 source "$DIR_LIB/sistema.sh"
 # shellcheck source=setup/lib/dados.sh

@@ -176,3 +176,34 @@ Este instalador faz parte da trilha **Agentes de Atendimento Humanizado** da [As
 Feito pela [Asimov Academy](https://asimov.academy)
 
 </div>
+
+
+## Retomar e compartilhar uma VPS
+
+A partir da v0.33.0, o comando público abre uma sessão tmux chamada
+`asimov-instalacao`. Se a conexão cair, execute o mesmo comando ou
+`tmux attach -t asimov-instalacao`. Uma trava impede instalações concorrentes.
+Uma instalação incompleta recebe o instalador atualizado ao repetir o comando.
+
+Ao retomar, o setup inventaria os contêineres do próprio projeto e confere os passos
+salvos. Serviços, migrações e saúde são reconciliados; DNS é conferido novamente.
+Volumes existentes sem as chaves originais interrompem a instalação: restaure o
+`.env` do backup, nunca gere outra chave para o mesmo banco.
+
+Portas públicas ocupadas oferecem o modo de proxy existente. O gateway Caddy do
+Asimov passa a escutar somente em portas locais livres, preservando o bloqueio de
+`/admin`. A API administrativa também usa porta local livre. O Caddy padrão do
+host pode receber um import após confirmação, com validação, backup e rollback.
+Outros proxies recebem instruções e um arquivo de referência em
+`deploy/proxy-externo.caddy`; o setup só confirma sucesso depois de HTTPS responder.
+Proxy dentro de outro contêiner precisa alcançar o host por uma rede configurada
+pelo administrador, nunca por `localhost` do próprio contêiner.
+
+O firewall é preservado por padrão e a atualização geral do sistema deixa de fazer
+parte da instalação. Pacotes necessários continuam sendo instalados. Em um Caddy
+com configuração modificada depois de uma interrupção, a recuperação para e aponta
+o backup para conciliação, sem apagar alterações posteriores.
+
+Testes adicionais: `bash setup/testes/simula_retomada.sh`,
+`python3 setup/testes/test_sessao.py` (tmux) e `bash setup/testes/caddy_real.sh`
+(Docker em Linux). Os testes usam configurações e serviços fictícios isolados.

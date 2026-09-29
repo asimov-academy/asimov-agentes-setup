@@ -72,7 +72,6 @@ instrucoes_dns() {
 }
 
 tela_dns() {
-  estado_tem dns_ok && return 0
   local sub dominio ip resolvido ipv6 resposta situacao anterior=""
   sub=$(env_get SUBDOMINIO_BOT)
   dominio=$(env_get DOMINIO_BASE)

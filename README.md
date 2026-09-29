@@ -100,6 +100,7 @@ Depois de instalar, tudo passa pelo comando `asimov`:
 | `asimov token` | Troca o token da trilha, que abre a imagem do painel |
 | `asimov diagnostico` | Mostra a versão instalada e se cada endereço está respondendo |
 | `asimov atualizar` | Baixa a versão nova e reinicia |
+| `asimov desinstalar` | Remove da VPS tudo o que o Asimov instalou, com backup opcional antes |
 
 **Personalidade do agente:** edite `~/asimov-agentes/prompts/<empresa>/<agente>/persona.md`. A mudança vale na próxima mensagem.
 
@@ -154,6 +155,16 @@ asimov atualizar
 ```
 
 Ele baixa a versão nova e reinicia. Se a versão nova não subir saudável, volta sozinho para a que estava no ar. O `.env`, os prompts dos agentes e as conversas não são tocados.
+
+## Desinstalar
+
+```bash
+asimov desinstalar
+```
+
+Remove da VPS tudo o que o Asimov instalou: contêineres, volumes e imagens, agentes, conversas, prompts, conexões dos canais, o pareamento do WhatsApp, os timers do backup e da WAHA, a integração com o Caddy da VPS (só a linha e o arquivo do Asimov), o login no registro das imagens, o comando `asimov`, a pasta do projeto e o estado em `~/.asimov`. Antes, ele oferece um backup (banco, `.env`, prompts e conhecimento) em `/var/lib/asimov/backups`, que fica na VPS. Para confirmar, é preciso digitar `desinstalar`.
+
+Ficam na VPS o Docker, os pacotes do sistema e a sua conta do Claude Code ou do Codex. Depois, no celular do WhatsApp, desconecte a VPS em Aparelhos conectados e, no Chatwoot, apague o bot do agente. Para instalar de novo, use o comando da [Instalação](#instalação).
 
 ## Como funciona
 

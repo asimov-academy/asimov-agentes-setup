@@ -65,15 +65,21 @@ confere_api_local() {
 }
 
 confere_https() {
-  local sub=$1 codigo=000 resultado=0
+  local sub=$1 codigo=000 resultado=0 corpo
   servico_rodando caddy || { echo "O Caddy do Asimov não está rodando."; return 1; }
+  corpo=$(mktemp) || return 1
   for _ in $(seq 1 24); do
     resultado=0
-    codigo=$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 10 "https://$sub/health") || resultado=$?
-    if [ "$resultado" -eq 0 ] && [ "$codigo" = 200 ]; then return 0; fi
+    codigo=$(curl -sS -o "$corpo" -w '%{http_code}' --connect-timeout 5 --max-time 10 "https://$sub/health") || resultado=$?
+    if [ "$resultado" -eq 0 ] && [ "$codigo" = 200 ] &&
+        jq -e '.api == "ok" and .banco == "ok" and .redis == "ok" and (.worker == "ok" or .worker == "aguardando")' "$corpo" >/dev/null 2>&1; then
+      rm -f "$corpo"
+      return 0
+    fi
     printf 'HTTPS: tentativa %s/24, curl=%s HTTP=%s\n' "$_" "$resultado" "$codigo"
     sleep 5
   done
+  rm -f "$corpo"
   case "$resultado" in
     6) echo "DNS: o domínio não foi resolvido." ;;
     7|28) echo "Conexão: confira encaminhamento no proxy e firewall da VPS/provedor." ;;

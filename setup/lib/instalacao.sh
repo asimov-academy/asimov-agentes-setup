@@ -18,40 +18,11 @@ garante_swap() {
   grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null
 }
 
+# Mantém o passo antigo compatível com a retomada, sem alterar regras da VPS.
 firewall() {
-  [ "$(estado_get configurar_firewall)" = sim ] || return 0
-  local porta
-  # Libera a porta real do SSH antes de ligar o firewall, para não trancar o operador fora.
-  for porta in $($SUDO ss -tlnpH 2>/dev/null | awk '/sshd/ {n=split($4,a,":"); print a[n]}' | sort -u); do
-    $SUDO ufw allow "$porta/tcp"
-  done
-  $SUDO ufw allow OpenSSH
-  $SUDO ufw allow 80/tcp
-  $SUDO ufw allow 443/tcp
-  $SUDO ufw --force enable
-  [ "$(env_get PROVEDOR_VPS)" = oracle ] && abre_iptables_da_oracle
-  return 0
+  estado_set configurar_firewall nao
 }
 
-# A imagem Ubuntu da Oracle Cloud carrega um `REJECT` no fim da cadeia INPUT, e as cadeias do ufw
-# entram depois dele: `ufw allow` sozinho não abre nada. O ACCEPT de 80 e 443 vai antes do REJECT.
-# Persistência: com o netfilter-persistent da imagem, salva nele; se o pacote saiu quando o ufw
-# entrou, as regras da imagem não voltam no boot e quem vale é o ufw, que já libera as duas portas.
-# A Security List no painel da Oracle é com o operador: daqui não dá para ver nem mudar.
-abre_iptables_da_oracle() {
-  local porta posicao
-  for porta in 80 443; do
-    while $SUDO iptables -D INPUT -p tcp --dport "$porta" -j ACCEPT 2>/dev/null; do :; done
-    posicao=$($SUDO iptables -L INPUT -n --line-numbers | awk '$2 == "REJECT" {print $1; exit}' || true)
-    $SUDO iptables -I INPUT "${posicao:-1}" -p tcp --dport "$porta" -j ACCEPT
-  done
-  if command -v netfilter-persistent >/dev/null 2>&1; then
-    $SUDO netfilter-persistent save
-  fi
-}
-
-# Só quem escolhe o Codex precisa de Node na VPS: o CLI dele é um pacote npm. O Claude Code tem
-# instalador próprio.
 instala_node() {
   command -v node >/dev/null 2>&1 && return 0
   curl -fsSL https://deb.nodesource.com/setup_lts.x -o /tmp/nodesource.sh
@@ -195,18 +166,9 @@ tela_instalacao() {
 
   confere_maquina
   confere_proxy_do_dns
-  if ! estado_tem configurar_firewall; then
-    info "Por padrão, o firewall existente é preservado. Libere HTTPS também no provedor da VPS."
-    if confirma "Autorizar o setup a configurar e ativar UFW nesta VPS?" false; then
-      estado_set configurar_firewall sim
-      estado_remove passo_firewall
-    else
-      estado_set configurar_firewall nao
-    fi
-  fi
   if painel_ligado; then painel_escreve_caddy "$(env_get SUBDOMINIO_APP)"; fi
   passo swap "Memória de reserva (swap)" "Veja o log." garante_swap
-  passo firewall "Firewall (SSH, 80 e 443)" "Confira com: ufw status" firewall
+  passo firewall "Regras de rede preservadas" "Veja o log." firewall
   passo agente_codigo "$(ia_nome)" "Veja o log." instala_agente_codigo
   passo segredos "Senhas e chaves" "Veja o log." --sem-repetir gera_segredos
   passo imagens "Plataforma $(destaque "v$VERSAO")" \

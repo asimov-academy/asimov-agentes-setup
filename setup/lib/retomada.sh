@@ -12,10 +12,10 @@ inventario_instalacao() {
   restaura_proxy || erro_fatal "Configuração do proxy pendente" "Confira o backup indicado no estado antes de continuar."
   secao "Conferindo a VPS"
   info "O progresso salvo será conferido. Dados, credenciais e aplicações existentes serão preservados."
-  $SUDO ss -ltnpH '( sport = :80 or sport = :443 or sport = :8000 )' 2>/dev/null || true
+  $SUDO ss -ltnpH '( sport = :80 or sport = :443 or sport = :8000 )' >>"$LOG" 2>&1 || true
   if command -v docker >/dev/null 2>&1; then
     $SUDO docker ps -a --filter label=com.docker.compose.project=asimov \
-      --format '  {{.Names}}: {{.Status}} | {{.Ports}}' || return 1
+      --format '  {{.Names}}: {{.Status}} | {{.Ports}}' >>"$LOG" 2>&1 || return 1
   fi
   # Uma instalação com dados e sem chave não pode gerar outra chave e perder acesso aos dados.
   local volumes="" chave id arquivos

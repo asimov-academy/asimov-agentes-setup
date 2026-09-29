@@ -25,15 +25,13 @@ escolhe_porta_local() {
 }
 
 prepara_rede() {
-  local modo ocupada=0 porta escolha_rede
+  local modo ocupada=0 porta
   for porta in 80 443; do
     if porta_ocupada "$porta" && ! porta_do_asimov "$porta" caddy; then ocupada=1; fi
   done
   modo=$(env_get ASIMOV_PROXY)
   if [ "$ocupada" = 1 ] && [ "$modo" != externo ]; then
-    aviso "80 ou 443 já pertence a outro serviço. Ele será preservado."
-    escolha escolha_rede "Como publicar o Asimov?" "Usar o proxy existente" "Parar e configurar depois"
-    [ "$escolha_rede" = 1 ] || erro_fatal "Instalação pausada sem alterar o proxy" "Rode novamente quando puder configurar o domínio."
+    info "Vou aproveitar a configuração existente, preservando suas aplicações."
     modo=externo
   fi
   modo=${modo:-proprio}
@@ -158,15 +156,20 @@ configura_proxy_externo() {
     integra_caddy_host || erro_fatal "Não consegui atualizar o proxy existente" "A configuração anterior foi preservada. Veja $LOG."
     return 0
   fi
-  info "O gateway do Asimov usa apenas 127.0.0.1:$(env_get ASIMOV_PORTA_HTTP)."
-  dica "Configuração para Caddy: $RAIZ_PROJETO/deploy/proxy-externo.caddy"
   if command -v caddy >/dev/null && $SUDO systemctl is-active --quiet caddy; then
-    if confirma "Adicionar os domínios ao Caddy do sistema, com backup e sem reiniciar?"; then
-      integra_caddy_host || erro_fatal "Integração automática não aplicada" "Use o arquivo gerado no seu proxy e rode novamente. Confira $LOG."
-      return 0
-    fi
+    info "Preparando o acesso seguro, preservando os sites existentes..."
+    integra_caddy_host || erro_fatal "Não foi possível preparar o acesso automaticamente" \
+      "A instalação está salva. Peça ao suporte para conferir $LOG e rode novamente."
+    return 0
   fi
-  info "No proxy existente, encaminhe os domínios para esse gateway, preservando Host."
-  dica "Proxy em contêiner precisa alcançar o host; localhost dentro dele não é a VPS. Não exponha a API administrativa."
-  confirma "O encaminhamento já foi configurado?" || erro_fatal "Instalação preservada" "Configure o proxy e execute o instalador novamente."
+  # Um encaminhamento já feito pelo administrador pode ser reaproveitado.
+  if confere_https "$(env_get SUBDOMINIO_BOT)" >>"$LOG" 2>&1; then return 0; fi
+  {
+    echo "Proxy existente sem integração automática."
+    echo "Referência: $RAIZ_PROJETO/deploy/proxy-externo.caddy"
+    echo "Encaminhe os domínios ao gateway 127.0.0.1:$(env_get ASIMOV_PORTA_HTTP), preservando Host."
+    echo "Proxy em contêiner precisa alcançar o host. Nunca exponha a API administrativa."
+  } >>"$LOG"
+  erro_fatal "Esta VPS precisa de um ajuste para liberar o acesso" \
+    "Suas aplicações foram preservadas. Envie $LOG ao suporte e depois rode novamente."
 }

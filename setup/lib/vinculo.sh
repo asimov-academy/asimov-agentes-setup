@@ -129,11 +129,11 @@ vinculo_roda_login() {
   fi
 }
 
-# O contêiner do copiloto serve ao painel e, com a assinatura ligada, ao atendimento: é ele que tem
-# o CLI e a credencial. Quem administra só pelo terminal e não usa a assinatura não baixa a imagem.
-# Quem liga ou desliga qualquer uma das condições chama esta função.
+# O contêiner do copiloto só existe para o painel: quem administra pelo terminal não baixa a imagem
+# dele. Por isso subir depende das duas coisas, conta vinculada e painel ligado, e quem liga cada
+# uma chama esta função. A assinatura no atendimento tem contêiner próprio (`assinatura_acerta`).
 copiloto_acerta() {
-  if vinculo_ligado && { painel_ligado || { assinatura_ligada && assinatura_cabe; }; }; then
+  if vinculo_ligado && painel_ligado; then
     copiloto_sobe
   else
     copiloto_desce
@@ -141,14 +141,6 @@ copiloto_acerta() {
 }
 
 copiloto_sobe() {
-  # A imagem do copiloto é privada. Com o painel ligado o token já foi aceito; só pela assinatura,
-  # ele é pedido aqui.
-  if ! acesso_valido; then
-    acesso_garante || {
-      aviso "Sem o token da trilha, o contêiner da assinatura não baixa. Os agentes respondem pela reserva."
-      return 1
-    }
-  fi
   printf '  %sPreparando o copiloto (leva alguns minutos na primeira vez)…%s' "$CINZA" "$NORMAL"
   env_set COPILOTO_ATIVO 1
   # Sempre recriando: o que muda entre uma vinculação e outra são os volumes da credencial e o
@@ -162,11 +154,7 @@ copiloto_sobe() {
   # A API lê o vínculo no boot: sem recriar, o painel seguiria sem o copiloto até alguém reiniciar.
   dc up -d --force-recreate api >>"$LOG" 2>&1 || true
   printf '\r\033[K'
-  if painel_ligado; then
-    ok "Copiloto no ar no painel."
-  else
-    ok "Contêiner da assinatura no ar."
-  fi
+  ok "Copiloto no ar no painel."
 }
 
 copiloto_desce() {
@@ -192,6 +180,7 @@ vinculo_entra() {
     conta=$(env_get IA_CONTA)
     ok "Conta de $(ia_nome) vinculada${conta:+ ${CINZA}$conta${NORMAL}}"
     copiloto_acerta || true
+    assinatura_ligada && { assinatura_acerta || true; }
     return 0
   fi
   vinculo_limpa
@@ -213,6 +202,11 @@ vinculo_sai() {
   fi
   vinculo_limpa
   copiloto_desce
+  if assinatura_ligada; then
+    env_set ASSINATURA_NO_ATENDIMENTO ""
+    assinatura_acerta || true
+    assinatura_reinicia
+  fi
   ok "Conta desvinculada. O painel segue funcionando sem o copiloto."
 }
 
@@ -221,6 +215,26 @@ assinatura_reinicia() {
   local -a servicos=(api worker)
   painel_ligado && servicos+=(painel)
   dc up -d --force-recreate "${servicos[@]}" >>"$LOG" 2>&1 || true
+  # A escolha do modelo pergunta à API logo em seguida: ela precisa estar de pé de novo.
+  espera_url "${API_LOCAL:-http://127.0.0.1:8000}/health" 24 >>"$LOG" 2>&1 || true
+}
+
+# O contêiner `assinatura` roda a imagem pública da plataforma com o Codex dentro: não pede token
+# nem painel. Sobe com a opção ligada, a conta vinculada e a instalação cabendo nela; recriado
+# sempre, porque o que muda entre um vínculo e outro são a pasta do login e o dono dela.
+assinatura_acerta() {
+  if assinatura_ligada && vinculo_ligado && assinatura_cabe; then
+    printf '  %sPreparando o contêiner da assinatura (leva alguns minutos na primeira vez)…%s' "$CINZA" "$NORMAL"
+    if ! dc pull assinatura >>"$LOG" 2>&1 || ! dc up -d --force-recreate assinatura >>"$LOG" 2>&1; then
+      printf '\r\033[K'
+      return 1
+    fi
+    printf '\r\033[K'
+    ok "Contêiner da assinatura no ar."
+  else
+    # Com a opção desligada o `dc` já não passa o perfil: ele vai à mão, só para remover.
+    dc --profile assinatura rm -sf assinatura >>"$LOG" 2>&1 || true
+  fi
 }
 
 assinatura_liga() {
@@ -229,7 +243,7 @@ assinatura_liga() {
   # Padrão Não: é experimento, e Enter segue só com a chave de API, como sempre foi.
   confirma "Deixar os agentes responderem pela assinatura?" false || return 0
   env_set ASSINATURA_NO_ATENDIMENTO 1
-  if ! copiloto_acerta; then
+  if ! assinatura_acerta; then
     env_set ASSINATURA_NO_ATENDIMENTO ""
     falha "Não liguei: o contêiner da assinatura não subiu. Veja o log: $LOG"
     return 1
@@ -241,7 +255,7 @@ assinatura_liga() {
 assinatura_desliga() {
   confirma "Desligar? Agente que responde pela assinatura passa a responder pela reserva." || return 0
   env_set ASSINATURA_NO_ATENDIMENTO ""
-  copiloto_acerta || true
+  assinatura_acerta || true
   assinatura_reinicia
   ok "Desligado. Os agentes respondem pela chave de API."
 }
@@ -259,6 +273,12 @@ vinculo_troca_cli() {
   vinculo_limpa
   # A imagem do copiloto leva o CLI dentro: trocar de assistente pede contêiner novo.
   copiloto_desce
+  # A assinatura no atendimento é só do Codex: trocar de assistente a desliga.
+  if assinatura_ligada; then
+    env_set ASSINATURA_NO_ATENDIMENTO ""
+    assinatura_acerta || true
+    assinatura_reinicia
+  fi
   ok "Assistente agora é $(ia_nome)."
   if [ -z "$(ia_binario)" ]; then
     aviso "$(ia_nome) ainda não está instalado. Rode: bash $RAIZ_PROJETO/setup/instalar.sh"

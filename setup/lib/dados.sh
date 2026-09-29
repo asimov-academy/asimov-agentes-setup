@@ -19,6 +19,14 @@ assinatura_vale() {
   [ "$API_STATUS" = 200 ] && jq -e '.assinatura.disponivel == true' <<<"$API_RESPOSTA" >/dev/null 2>&1
 }
 
+# assinatura_oferece: a opção entra na lista quando já vale ou quando pode ser ligada ali mesmo
+# (instalação para a própria empresa, Codex vinculado). Instalação retomada pulava a pergunta da
+# conta de IA, e a assinatura nunca aparecia na criação do primeiro agente.
+assinatura_oferece() {
+  assinatura_vale && return 0
+  assinatura_cabe && vinculo_ligado
+}
+
 # assinatura_explica: o risco aparece toda vez que ela é escolhida, não só quando é ligada.
 assinatura_explica() {
   aviso "Experimental: responde pela sua conta do ChatGPT, sem custo por mensagem, dentro do limite do plano."
@@ -53,9 +61,9 @@ pede_chave() {
 # escolhe_modelo_em VAR "rótulo" função opcional provedor...: define VAR como provedor:modelo.
 # Com opcional não vazio, a primeira opção é ficar sem modelo (VAR vazia).
 escolhe_modelo_em() {
-  local __destino=$1 __rotulo=$2 __funcao=$3 __opcional=$4 __op __indice __provedor __modelo __linha
+  local __destino=$1 __rotulo=$2 __funcao=$3 __opcional=$4 __op __indice __provedor __modelo __linha __outro
   shift 4
-  local -a __provedores=() __nomes=() __modelos=()
+  local -a __provedores=() __nomes=() __modelos=() __sem_assinatura=()
   for __provedor in "$@"; do
     [ "$__funcao" = transcricao ] && [ "$__provedor" = anthropic ] && continue
     __provedores+=("$__provedor")
@@ -79,7 +87,18 @@ escolhe_modelo_em() {
     __op=$((__op - 1))
   fi
   __provedor=${__provedores[$((__op - 1))]}
-  if [ "$__provedor" = assinatura ]; then
+  if [ "$__provedor" = assinatura ] && ! assinatura_vale; then
+    # Ainda desligada: liga aqui mesmo. Recusou ou não subiu, a escolha volta sem a assinatura.
+    assinatura_liga || true
+    if ! assinatura_vale; then
+      dica "Seguindo com um provedor com chave de API."
+      for __outro in "${__provedores[@]}"; do
+        [ "$__outro" = assinatura ] || __sem_assinatura+=("$__outro")
+      done
+      escolhe_modelo_em "$__destino" "$__rotulo" "$__funcao" "$__opcional" "${__sem_assinatura[@]}"
+      return 0
+    fi
+  elif [ "$__provedor" = assinatura ]; then
     assinatura_explica
   else
     pede_chave "$__provedor"
@@ -111,7 +130,7 @@ escolhe_modelo_em() {
 escolhe_modelo_do_novo_agente() {
   local resposta audio reserva base
   local -a provedores=(openai anthropic gemini groq)
-  assinatura_vale && provedores+=(assinatura)
+  assinatura_oferece && provedores+=(assinatura)
   dica "Cada agente tem a própria IA. Resumo, imagem e áudio seguem o mesmo provedor"
   dica "e mudam depois em Editar agente > Modelos."
   escolhe_modelo_em resposta "IA que responde o contato" conversa "" "${provedores[@]}"

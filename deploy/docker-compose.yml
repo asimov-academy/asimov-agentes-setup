@@ -120,6 +120,19 @@ services:
       # O Claude Code guarda o estado do primeiro uso fora da pasta da credencial, num arquivo só.
       - ${CONFIG_IA_HOST:-../modelos/privacidade.html}:${CONFIG_IA_CONTAINER:-/tmp/sem-config-ia}:rw
 
+  # Agente respondendo contato pela assinatura ChatGPT (experimental). Sobe pelo perfil
+  # `assinatura`, ligado em `asimov ia` (ASSINATURA_NO_ATENDIMENTO=1 no .env, lido pelo `dc`). A
+  # imagem é a pública da plataforma com o Codex dentro (tag `-assinatura`): não pede token nem
+  # painel. Sem porta: quem fala com ele é o turno, pela fila do Redis. Monta só a pasta do login.
+  assinatura:
+    <<: *backend
+    profiles: ["assinatura"]
+    image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}-assinatura"
+    command: ["arq", "app.ia.codex.Configuracao"]
+    user: "${CREDENCIAL_IA_UID:-1000}:${CREDENCIAL_IA_GID:-1000}"
+    volumes:
+      - ${CREDENCIAL_IA_HOST:-../modelos}:${CREDENCIAL_IA_CONTAINER:-/tmp/sem-credencial}:rw
+
   # WhatsApp pela WAHA. Sobe com o resto da plataforma, na instalação: sem isso, ligar o WhatsApp
   # pelo painel esbarrava num contêiner que só o terminal sabia subir. Sem porta publicada: quem
   # fala com ela é a API, pela rede do Compose. O volume guarda o pareamento do número.

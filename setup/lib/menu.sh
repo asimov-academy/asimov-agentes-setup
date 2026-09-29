@@ -69,7 +69,7 @@ escolhe_modelo_do_agente() {
     *) campo=modelo_transcricao funcao=transcricao rotulo="Transcrição de áudio" ;;
   esac
   # A assinatura ChatGPT (experimental) só conversa e resume, e só aparece quando a API diz que vale.
-  if { [ "$campo" = modelo_conversa ] || [ "$campo" = modelo_auxiliar ]; } && assinatura_vale; then
+  if { [ "$campo" = modelo_conversa ] || [ "$campo" = modelo_auxiliar ]; } && assinatura_oferece; then
     provedores+=(assinatura)
   fi
   escolhe_modelo_em MODELO_ESCOLHIDO "$rotulo" "$funcao" "$opcional" "${provedores[@]}"

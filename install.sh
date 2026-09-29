@@ -31,7 +31,7 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${ASIMOV_TTY:-}" ] && [ -z "${TMUX:-}" ] && [ -
     (umask 077; curl -fsSL https://raw.githubusercontent.com/asimov-academy/asimov-agentes-setup/main/install.sh -o "$sessao_script")
   fi
   printf -v sessao_comando 'env ASIMOV_SESSAO=1 ASIMOV_ESTADO_DIR=%q ASIMOV_ATUALIZAR=%q ASIMOV_DIR=%q ASIMOV_VERSAO=%q ASIMOV_PACOTE=%q ASIMOV_SHA256=%q bash %q' \
-    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.34.1}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
+    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.35.0}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
   echo "Se a conexão cair, rode o mesmo comando ou: tmux attach -t asimov-instalacao"
   exec tmux new-session -A -s asimov-instalacao "$sessao_comando"
 fi
@@ -40,7 +40,7 @@ exec 9>"$ASIMOV_ESTADO_DIR/instalacao.lock"
 flock -n 9 || { echo "Outra instalação está em andamento. Use: tmux attach -t asimov-instalacao"; exit 1; }
 export ASIMOV_LOCK=1
 
-VERSAO="${ASIMOV_VERSAO:-v0.34.1}"
+VERSAO="${ASIMOV_VERSAO:-v0.35.0}"
 PACOTE="${ASIMOV_PACOTE:-https://codeload.github.com/asimov-academy/asimov-agentes-setup/tar.gz/$VERSAO}"
 SHA256="${ASIMOV_SHA256:-}"
 DESTINO="${ASIMOV_DIR:-$HOME/asimov-agentes}"

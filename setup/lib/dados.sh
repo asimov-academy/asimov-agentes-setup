@@ -8,7 +8,21 @@ nome_bonito() {
     anthropic) echo Anthropic ;;
     gemini) echo Gemini ;;
     groq) echo Groq ;;
+    assinatura) echo "Assinatura ChatGPT" ;;
   esac
+}
+
+# assinatura_vale: a API diz se esta instalação responde contato pela assinatura ChatGPT
+# (experimental): modo empresa, Codex vinculado e ASSINATURA_NO_ATENDIMENTO=1, ligado em `asimov ia`.
+assinatura_vale() {
+  api GET /admin/ia/chaves
+  [ "$API_STATUS" = 200 ] && jq -e '.assinatura.disponivel == true' <<<"$API_RESPOSTA" >/dev/null 2>&1
+}
+
+# assinatura_explica: o risco aparece toda vez que ela é escolhida, não só quando é ligada.
+assinatura_explica() {
+  aviso "Experimental: responde pela sua conta do ChatGPT, sem custo por mensagem, dentro do limite do plano."
+  dica "A OpenAI indica chave de API para automação e pode limitar a conta: use uma conta só para isto."
 }
 
 # provedor_tem_chave provedor: a API diz quais provedores já têm chave guardada (nunca a chave).
@@ -47,7 +61,13 @@ escolhe_modelo_em() {
     __provedores+=("$__provedor")
   done
   [ -n "$__opcional" ] && __nomes+=("Sem fallback")
-  for __provedor in "${__provedores[@]}"; do __nomes+=("$(nome_bonito "$__provedor")"); done
+  for __provedor in "${__provedores[@]}"; do
+    if [ "$__provedor" = assinatura ]; then
+      __nomes+=("Assinatura ChatGPT  ${CINZA}experimental, sem chave de API${NORMAL}")
+    else
+      __nomes+=("$(nome_bonito "$__provedor")")
+    fi
+  done
 
   echo
   escolha __op "$__rotulo" "${__nomes[@]}"
@@ -59,7 +79,11 @@ escolhe_modelo_em() {
     __op=$((__op - 1))
   fi
   __provedor=${__provedores[$((__op - 1))]}
-  pede_chave "$__provedor"
+  if [ "$__provedor" = assinatura ]; then
+    assinatura_explica
+  else
+    pede_chave "$__provedor"
+  fi
 
   api GET "/admin/ia/modelos/$__provedor?funcao=$__funcao"
   if [ "$API_STATUS" = 200 ]; then
@@ -85,13 +109,25 @@ escolhe_modelo_em() {
 # MODELOS_NOVO_AGENTE (JSON do campo `modelos`). Só a resposta é perguntada: resumo, visão e áudio
 # nascem no mesmo provedor e mudam em Editar agente > Modelos.
 escolhe_modelo_do_novo_agente() {
-  local resposta audio
+  local resposta audio reserva base
+  local -a provedores=(openai anthropic gemini groq)
+  assinatura_vale && provedores+=(assinatura)
   dica "Cada agente tem a própria IA. Resumo, imagem e áudio seguem o mesmo provedor"
   dica "e mudam depois em Editar agente > Modelos."
-  escolhe_modelo_em resposta "IA que responde o contato" conversa "" openai anthropic gemini groq
+  escolhe_modelo_em resposta "IA que responde o contato" conversa "" "${provedores[@]}"
   MODELOS_NOVO_AGENTE=$(jq -n --arg r "$resposta" '{modelo_conversa: $r}')
+  base=${resposta%%:*}
+  # Pela assinatura, a reserva com chave é obrigatória: quando a janela de uso acaba, é ela quem
+  # responde. Imagem e áudio também saem dela, porque o Codex não lê arquivo nem transcreve.
+  if [ "$base" = assinatura ]; then
+    echo
+    dica "A reserva responde quando a janela de uso da assinatura acaba, e cuida de imagem e áudio."
+    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq
+    MODELOS_NOVO_AGENTE=$(jq --arg f "$reserva" '. + {modelo_fallback: $f}' <<<"$MODELOS_NOVO_AGENTE")
+    base=${reserva%%:*}
+  fi
   # A Anthropic não transcreve áudio: sem outro provedor com chave, o áudio precisa de um.
-  if [ "${resposta%%:*}" = anthropic ] && ! provedor_tem_chave openai && ! provedor_tem_chave groq &&
+  if [ "$base" = anthropic ] && ! provedor_tem_chave openai && ! provedor_tem_chave groq &&
     ! provedor_tem_chave gemini; then
     dica "A Anthropic não transcreve áudio. Escolha quem transcreve."
     escolhe_modelo_em audio "Transcrição de áudio" transcricao "" openai groq gemini

@@ -29,6 +29,11 @@ ia_binario() {
 
 vinculo_ligado() { [ "$(env_get IA_VINCULADA)" = 1 ]; }
 
+# Agente respondendo contato pela assinatura ChatGPT (experimental). Só cabe na instalação para a
+# própria empresa e com o Codex: na revenda seria a conta de uma pessoa atendendo empresas de outros.
+assinatura_ligada() { [ "$(env_get ASSINATURA_NO_ATENDIMENTO)" = 1 ]; }
+assinatura_cabe() { [ "$(env_get MODO_INSTALACAO)" = empresa ] && ia_e_codex; }
+
 # vinculo_situacao: vinculada, sem_conta ou sem_cli. É o único lugar que sabe como cada CLI
 # responde, porque é a primeira coisa a quebrar quando o CLI muda o jeito de guardar o login.
 vinculo_situacao() {
@@ -124,11 +129,11 @@ vinculo_roda_login() {
   fi
 }
 
-# O contêiner do copiloto só existe para o painel: quem administra pelo terminal não baixa a imagem
-# dele. Por isso subir depende das duas coisas, conta vinculada e painel ligado, e quem liga cada
-# uma chama esta função.
+# O contêiner do copiloto serve ao painel e, com a assinatura ligada, ao atendimento: é ele que tem
+# o CLI e a credencial. Quem administra só pelo terminal e não usa a assinatura não baixa a imagem.
+# Quem liga ou desliga qualquer uma das condições chama esta função.
 copiloto_acerta() {
-  if vinculo_ligado && painel_ligado; then
+  if vinculo_ligado && { painel_ligado || { assinatura_ligada && assinatura_cabe; }; }; then
     copiloto_sobe
   else
     copiloto_desce
@@ -136,6 +141,14 @@ copiloto_acerta() {
 }
 
 copiloto_sobe() {
+  # A imagem do copiloto é privada. Com o painel ligado o token já foi aceito; só pela assinatura,
+  # ele é pedido aqui.
+  if ! acesso_valido; then
+    acesso_garante || {
+      aviso "Sem o token da trilha, o contêiner da assinatura não baixa. Os agentes respondem pela reserva."
+      return 1
+    }
+  fi
   printf '  %sPreparando o copiloto (leva alguns minutos na primeira vez)…%s' "$CINZA" "$NORMAL"
   env_set COPILOTO_ATIVO 1
   # Sempre recriando: o que muda entre uma vinculação e outra são os volumes da credencial e o
@@ -149,7 +162,11 @@ copiloto_sobe() {
   # A API lê o vínculo no boot: sem recriar, o painel seguiria sem o copiloto até alguém reiniciar.
   dc up -d --force-recreate api >>"$LOG" 2>&1 || true
   printf '\r\033[K'
-  ok "Copiloto no ar no painel."
+  if painel_ligado; then
+    ok "Copiloto no ar no painel."
+  else
+    ok "Contêiner da assinatura no ar."
+  fi
 }
 
 copiloto_desce() {
@@ -199,6 +216,36 @@ vinculo_sai() {
   ok "Conta desvinculada. O painel segue funcionando sem o copiloto."
 }
 
+# A API, o worker e o painel leem a opção no boot: sem recriar, a escolha não aparece nem vale.
+assinatura_reinicia() {
+  local -a servicos=(api worker)
+  painel_ligado && servicos+=(painel)
+  dc up -d --force-recreate "${servicos[@]}" >>"$LOG" 2>&1 || true
+}
+
+assinatura_liga() {
+  assinatura_explica
+  dica "Cada agente escolhe em Editar agente > Modelos, e precisa de uma reserva com chave de API."
+  # Padrão Não: é experimento, e Enter segue só com a chave de API, como sempre foi.
+  confirma "Deixar os agentes responderem pela assinatura?" false || return 0
+  env_set ASSINATURA_NO_ATENDIMENTO 1
+  if ! copiloto_acerta; then
+    env_set ASSINATURA_NO_ATENDIMENTO ""
+    falha "Não liguei: o contêiner da assinatura não subiu. Veja o log: $LOG"
+    return 1
+  fi
+  assinatura_reinicia
+  ok "Ligado. Escolha a assinatura em Editar agente > Modelos ou na ficha do painel."
+}
+
+assinatura_desliga() {
+  confirma "Desligar? Agente que responde pela assinatura passa a responder pela reserva." || return 0
+  env_set ASSINATURA_NO_ATENDIMENTO ""
+  copiloto_acerta || true
+  assinatura_reinicia
+  ok "Desligado. Os agentes respondem pela chave de API."
+}
+
 # Trocar de CLI troca o motor do copiloto, que lê AGENTE_CODIGO. O login do CLI novo é pedido na hora, senão o operador fica sem copiloto sem saber.
 vinculo_troca_cli() {
   local op atual
@@ -235,6 +282,9 @@ fluxo_vinculo() {
     sem_cli) campo "Conta" "$(ia_nome) não instalado" ;;
   esac
   campo "Copiloto" "$(vinculo_ligado && echo "ligado no painel" || echo "desligado")"
+  if assinatura_cabe; then
+    campo "Atendimento" "$(assinatura_ligada && echo "pode responder pela assinatura" || echo "só pela chave de API")"
+  fi
   echo
 
   # O .env pode estar desencontrado do CLI: alguém deslogou por fora, ou o login expirou.
@@ -249,8 +299,16 @@ fluxo_vinculo() {
   fi
 
   if [ "$situacao" = vinculada ]; then
-    rotulos=("Trocar de assistente" "Desvincular a conta" "Voltar")
+    rotulos=("Trocar de assistente" "Desvincular a conta")
     acoes=(vinculo_troca_cli vinculo_sai)
+    if assinatura_cabe && assinatura_ligada; then
+      rotulos+=("Parar de responder contatos pela assinatura")
+      acoes+=(assinatura_desliga)
+    elif assinatura_cabe; then
+      rotulos+=("Responder contatos pela assinatura  ${CINZA}experimental${NORMAL}")
+      acoes+=(assinatura_liga)
+    fi
+    rotulos+=("Voltar")
   else
     rotulos=("Vincular a conta agora" "Trocar de assistente" "Voltar")
     acoes=(vinculo_entra vinculo_troca_cli)
@@ -279,6 +337,12 @@ tela_vinculo_ia() {
 
   if confirma "Entrar na sua conta de $(ia_nome) agora?"; then
     vinculo_entra || true
+    # Na instalação para a própria empresa com o Codex, a mesma conta pode responder os contatos.
+    # Perguntado aqui, antes do primeiro agente, para ele já poder nascer pela assinatura.
+    if vinculo_ligado && assinatura_cabe && ! assinatura_ligada; then
+      echo
+      assinatura_liga || true
+    fi
     pausa
   else
     dica "Quando quiser: asimov ia"

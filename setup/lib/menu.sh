@@ -49,7 +49,7 @@ salva_agente() {
 # escolhe_modelo_do_agente: pergunta a função e o modelo; define CORPO_MODELO para o PATCH.
 # Provedor sem chave pede a chave na hora; a API guarda e ela vale no próximo turno.
 escolhe_modelo_do_agente() {
-  local op campo funcao rotulo opcional=""
+  local op campo funcao rotulo opcional="" reserva
   local -a provedores=(openai anthropic gemini groq)
   echo
   escolha op "Qual modelo" \
@@ -68,9 +68,20 @@ escolhe_modelo_do_agente() {
     4) campo=modelo_visao funcao=visao rotulo="Visão (imagens e PDF)" ;;
     *) campo=modelo_transcricao funcao=transcricao rotulo="Transcrição de áudio" ;;
   esac
+  # A assinatura ChatGPT (experimental) só conversa e resume, e só aparece quando a API diz que vale.
+  if { [ "$campo" = modelo_conversa ] || [ "$campo" = modelo_auxiliar ]; } && assinatura_vale; then
+    provedores+=(assinatura)
+  fi
   escolhe_modelo_em MODELO_ESCOLHIDO "$rotulo" "$funcao" "$opcional" "${provedores[@]}"
   CORPO_MODELO=$(jq -n --arg campo "$campo" --arg modelo "$MODELO_ESCOLHIDO" \
     '{($campo): (if $modelo == "" then null else $modelo end)}')
+  # Pela assinatura sem reserva, a API recusa: a reserva é pedida aqui, na mesma mudança.
+  if [ "${MODELO_ESCOLHIDO%%:*}" = assinatura ] && [ -z "$(jq -r '.modelo_fallback // ""' <<<"$AGENTE")" ]; then
+    echo
+    dica "Pela assinatura o agente precisa de uma reserva com chave, para quando a janela de uso acabar."
+    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq
+    CORPO_MODELO=$(jq --arg f "$reserva" '. + {modelo_fallback: $f}' <<<"$CORPO_MODELO")
+  fi
 }
 
 # Cada mudança roda em `com_voltar`: Esc no meio volta para a ficha sem salvar.

@@ -28,7 +28,7 @@ date() { command date '+%Y-%m-%dT%H:%M:%S'; }
 info() { :; }; dica() { :; }; aviso() { :; }; ok() { :; }; secao() { :; }
 erro_fatal() { echo "$*" >&2; exit 1; }
 linha_ok() { :; }; linha_rodando() { :; }; linha_erro() { :; }
-confirma() { return 1; }
+confirma() { echo "Pergunta técnica inesperada" >&2; exit 99; }
 # Retorno de subida não pode ser mascarado pelo reload.
 dc() { [ "$1" != up ]; }
 if sobe_servicos; then echo 'FALHOU: up recusado virou sucesso'; exit 1; fi
@@ -62,7 +62,7 @@ echo 'ok: volumes sem chaves impedem regeneração'
 (
   porta_ocupada() { case "$1" in 80|443|8000|18080) return 0 ;; *) return 1 ;; esac; }
   porta_do_asimov() { return 1; }
-  escolha() { printf -v "$1" 1; }
+  escolha() { echo "Escolha técnica inesperada" >&2; exit 99; }
   prepara_rede
   [ "$(env_get ASIMOV_PROXY)" = externo ]
   [ "$(env_get ASIMOV_HTTP_BIND)" = 127.0.0.1:18081 ]
@@ -79,11 +79,12 @@ echo 'ok: portas de terceiros preservadas e API alternativa'
 )
 echo 'ok: portas do próprio projeto não são conflito'
 
-# Firewall é opt-in e não pode executar nenhum comando quando recusado.
+# Firewall é preservado inclusive se uma versão antiga salvou autorização.
 (
-  estado_set configurar_firewall nao
+  estado_set configurar_firewall sim
   ufw() { exit 99; }
   firewall
+  [ "$(estado_get configurar_firewall)" = nao ]
 )
 echo 'ok: firewall preservado por padrão'
 
@@ -143,6 +144,23 @@ echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
   cmp "$HOST_CONFIG" "$TEMP_TESTE/integrado"
 )
 echo 'ok: candidato inválido não altera host; reload falho e interrupção recuperáveis'
+
+# Caddy padrão é integrado sem pergunta; proxy desconhecido preserva o host e para.
+(
+  env_set ASIMOV_PROXY externo
+  estado_remove proxy_host_integrado
+  caddy() { :; }
+  systemctl() { [ "$1" = is-active ]; }
+  integra_caddy_host() { touch "$TEMP_TESTE/automatico"; }
+  configura_proxy_externo
+  [ -f "$TEMP_TESTE/automatico" ]
+  systemctl() { return 1; }
+  confere_https() { return 1; }
+  if (configura_proxy_externo) 2>/dev/null; then exit 1; fi
+  confere_https() { return 0; }
+  configura_proxy_externo
+)
+echo 'ok: acesso automático sem perguntas; proxy desconhecido preservado'
 
 # Estado e configuração sempre são arquivos completos após substituição.
 estado_set teste preservado

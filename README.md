@@ -79,7 +79,7 @@ O instalador pergunta, nesta ordem:
 > Se algo falhar, ele mostra o motivo. Rode o mesmo comando de novo e ele continua de onde parou.
 
 > [!NOTE]
-> Na **Oracle Cloud**, libere as portas 80 e 443 na Security List da sua rede antes de instalar. O instalador cuida do firewall da própria máquina.
+> Na **Oracle Cloud**, libere as portas 80 e 443 na Security List da sua rede antes de instalar. O instalador preserva o firewall da máquina.
 
 ## Comandos
 
@@ -190,16 +190,16 @@ salvos. Serviços, migrações e saúde são reconciliados; DNS é conferido nov
 Volumes existentes sem as chaves originais interrompem a instalação: restaure o
 `.env` do backup, nunca gere outra chave para o mesmo banco.
 
-Portas públicas ocupadas oferecem o modo de proxy existente. O gateway Caddy do
+Desde a v0.33.1, portas públicas ocupadas selecionam automaticamente o proxy existente. O gateway Caddy do
 Asimov passa a escutar somente em portas locais livres, preservando o bloqueio de
 `/admin`. A API administrativa também usa porta local livre. O Caddy padrão do
-host pode receber um import após confirmação, com validação, backup e rollback.
+host recebe um import automaticamente, com validação, backup e rollback.
 Outros proxies recebem instruções e um arquivo de referência em
 `deploy/proxy-externo.caddy`; o setup só confirma sucesso depois de HTTPS responder.
 Proxy dentro de outro contêiner precisa alcançar o host por uma rede configurada
 pelo administrador, nunca por `localhost` do próprio contêiner.
 
-O firewall é preservado por padrão e a atualização geral do sistema deixa de fazer
+O firewall é sempre preservado, sem perguntas de configuração, e a atualização geral do sistema deixa de fazer
 parte da instalação. Pacotes necessários continuam sendo instalados. Em um Caddy
 com configuração modificada depois de uma interrupção, a recuperação para e aponta
 o backup para conciliação, sem apagar alterações posteriores.

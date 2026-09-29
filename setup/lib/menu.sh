@@ -203,11 +203,11 @@ fluxo_diagnostico() {
   campo "Versão instalada" "$(estado_get versao)"
   campo "Pasta" "$RAIZ_PROJETO"
   echo
-  confere_endereco "API, por dentro" "http://127.0.0.1:8000/health"
+  confere_endereco "API, por dentro" "${API_LOCAL:-http://127.0.0.1:8000}/health"
   confere_endereco "API, pelo domínio" "https://$sub/health"
   confere_endereco "Política de privacidade" "https://$sub/privacidade"
   confere_endereco "Ícone do app" "https://$sub/icone-app.png"
-  confere_endereco "WAHA, por dentro" "http://127.0.0.1:8000/admin/canais/waha" --com-chave
+  confere_endereco "WAHA, por dentro" "${API_LOCAL:-http://127.0.0.1:8000}/admin/canais/waha" --com-chave
   if painel_ligado; then
     confere_endereco "Painel" "https://$(env_get SUBDOMINIO_APP)/painel/entrar"
   fi

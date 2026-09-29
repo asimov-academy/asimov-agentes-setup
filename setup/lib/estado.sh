@@ -17,7 +17,7 @@ estado_get() {
 
 estado_set() {
   local temp
-  temp=$(mktemp)
+  temp=$(mktemp "$DIR_ESTADO/.estado.XXXXXX")
   grep -v "^$1=" "$ARQ_ESTADO" >"$temp" 2>/dev/null || true
   printf '%s=%s\n' "$1" "$2" >>"$temp"
   mv "$temp" "$ARQ_ESTADO"
@@ -26,7 +26,7 @@ estado_set() {
 
 estado_remove() {
   local temp chave
-  temp=$(mktemp)
+  temp=$(mktemp "$DIR_ESTADO/.estado.XXXXXX")
   cp "$ARQ_ESTADO" "$temp"
   for chave in "$@"; do
     grep -v "^$chave=" "$temp" >"$temp.novo" || true
@@ -62,10 +62,12 @@ env_get() {
 env_set() {
   local temp
   [ -f "$ARQ_ENV" ] || install -m 600 /dev/null "$ARQ_ENV"
-  temp=$(mktemp)
+  temp=$(mktemp "$DIR_ESTADO/.estado.XXXXXX")
   grep -v "^$1=" "$ARQ_ENV" >"$temp" || true
   printf '%s=%s\n' "$1" "$2" >>"$temp"
-  install -m 600 "$temp" "$ARQ_ENV"
+  local destino
+  destino=$(mktemp "${ARQ_ENV}.XXXXXX") || return 1
+  install -m 600 "$temp" "$destino" && mv -f "$destino" "$ARQ_ENV" || return 1
   rm -f "$temp"
 }
 
@@ -115,8 +117,12 @@ passo() {
   PASSO_ATUAL=$((PASSO_ATUAL + 1))
 
   if estado_tem "passo_$id"; then
-    linha_ok "$PASSO_ATUAL" "$PASSO_TOTAL" "$descricao"
-    return 0
+    if confere_passo "$id" >>"$LOG" 2>&1; then
+      linha_ok "$PASSO_ATUAL" "$PASSO_TOTAL" "$descricao (conferido)"
+      return 0
+    fi
+    estado_remove "passo_$id"
+    printf '\nRevalidando passo %s: estado salvo não basta.\n' "$id" >>"$LOG"
   fi
 
   linha_rodando "$PASSO_ATUAL" "$PASSO_TOTAL" "$descricao"

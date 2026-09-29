@@ -2,7 +2,8 @@
 # Tela 6: primeiro agente. Tudo passa pela API; o setup nunca toca no banco.
 # O token de administrador do Chatwoot só vive nesta tela: a API cria o bot e o descarta.
 
-API_LOCAL="http://127.0.0.1:8000"
+API_LOCAL="http://127.0.0.1:$(env_get ASIMOV_PORTA_API)"
+[ "$API_LOCAL" != "http://127.0.0.1:" ] || API_LOCAL="http://127.0.0.1:8000"
 
 # api MÉTODO CAMINHO [JSON]: grava o status HTTP em API_STATUS e o corpo em API_RESPOSTA.
 # Não chame dentro de $(...): as variáveis se perderiam na subshell.

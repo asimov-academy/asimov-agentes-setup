@@ -58,7 +58,7 @@ services:
       <<: *backend-env
       PAINEL_ATIVO: ""
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${ASIMOV_PORTA_API:-8000}:8000"
 
   worker:
     <<: *backend
@@ -81,11 +81,12 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "${ASIMOV_HTTP_BIND:-80}:80"
+      - "${ASIMOV_HTTPS_BIND:-443}:443"
     environment:
       SUBDOMINIO_BOT: ${SUBDOMINIO_BOT}
       EMAIL_SSL: ${EMAIL_SSL}
+      ASIMOV_ESQUEMA: ${ASIMOV_ESQUEMA:-https}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Bloco do painel, escrito pelo setup quando o operador liga app.<dominio>.

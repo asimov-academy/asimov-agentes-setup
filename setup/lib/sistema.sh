@@ -6,7 +6,7 @@ MEMORIA_MINIMA_KB=1800000
 DISCO_MINIMO_KB=20000000
 
 export DEBIAN_FRONTEND=noninteractive
-export NEEDRESTART_MODE=a
+export NEEDRESTART_MODE=l
 APT_OPCOES=(-y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 
 tela_boas_vindas() {
@@ -53,7 +53,7 @@ instala_docker() {
 tela_iniciando() {
   banner_iniciando
   PASSO_ATUAL=0
-  PASSO_TOTAL=8
+  PASSO_TOTAL=7
   passo ubuntu "Ubuntu 24.04" \
     "Este setup só roda em Ubuntu 24.04. Reinstale a VPS com essa imagem." \
     --sem-repetir verifica_ubuntu
@@ -61,7 +61,7 @@ tela_iniciando() {
     "A VPS precisa de 2 GB de RAM e 20 GB livres (4 GB para usar a WAHA junto com o copiloto). Aumente o plano." \
     --sem-repetir verifica_recursos
   passo update "Lista de pacotes" "Confira a internet da VPS: ping -c 3 archive.ubuntu.com" apt_update
-  passo upgrade "Atualização do sistema" "Rode apt-get upgrade para ver o erro." apt_upgrade
+  dica "Atualizações gerais do sistema ficam com o administrador da VPS."
   passo base "sudo, apt-utils e dialog" "Veja o log." apt_instala sudo apt-utils dialog
   passo ferramentas "jq, curl e dnsutils" "Veja o log." \
     apt_instala jq curl ca-certificates gnupg dnsutils openssl qrencode

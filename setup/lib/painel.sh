@@ -24,7 +24,8 @@ painel_ligado() { [ "$(env_get PAINEL_ATIVO)" = 1 ]; }
 # painel_escreve_caddy [subdominio]: sem subdomínio, deixa o arquivo só com o comentário.
 # O domínio vai literal: assim o contêiner do Caddy não precisa de variável nova.
 painel_escreve_caddy() {
-  local sub=${1:-}
+  local sub=${1:-} esquema
+  esquema=$(env_get ASIMOV_ESQUEMA); esquema=${esquema:-https}
   if [ -z "$sub" ]; then
     printf '# Painel desligado. O comando asimov painel escreve o bloco de app.<dominio> aqui.\n' \
       >"$ARQ_CADDY_PAINEL"
@@ -32,7 +33,7 @@ painel_escreve_caddy() {
   fi
   cat >"$ARQ_CADDY_PAINEL" <<CADDY
 # Escrito por asimov painel. Só o painel responde neste host: /admin e /webhook, nunca.
-$sub {
+${esquema}://$sub {
 	@bloqueado path /admin* /webhook*
 	handle @bloqueado {
 		respond 404
@@ -47,9 +48,10 @@ CADDY
 
 # Recarrega o Caddy com o arquivo novo. Mudar o arquivo montado não muda o que ele já carregou.
 painel_recarrega_caddy() {
-  dc up -d caddy >>"$LOG" 2>&1
+  configura_proxy_externo || return 1
+  dc up -d caddy >>"$LOG" 2>&1 || return 1
   dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1 ||
-    dc restart caddy >>"$LOG" 2>&1 || true
+    return 1
 }
 
 # Quem monta as telas do painel é o serviço `painel`, num contêiner à parte com a imagem privada.
@@ -135,10 +137,11 @@ painel_mostra_codigo() {
 # Roda em toda atualização e só faz alguma coisa quando o arquivo não tem mais o bloco.
 painel_garante_caddy() {
   painel_ligado || return 0
-  local sub
+  local sub esquema
+  esquema=$(env_get ASIMOV_ESQUEMA); esquema=${esquema:-https}
   sub=$(env_get SUBDOMINIO_APP)
   [ -n "$sub" ] || return 0
-  grep -q "^$sub {" "$ARQ_CADDY_PAINEL" 2>/dev/null && return 0
+  grep -q "^${esquema}://$sub {" "$ARQ_CADDY_PAINEL" 2>/dev/null && return 0
   painel_escreve_caddy "$sub"
   painel_recarrega_caddy
   ok "Endereço do painel reescrito no servidor web: $(destaque "$sub")"

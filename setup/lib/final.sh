@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034  # PASSO_ATUAL e PASSO_TOTAL são lidas por passo(), em estado.sh
-# Tela 7: comando asimov e resumo.
+# Tela 7: contexto dos assistentes, comando asimov e resumo.
+
+# Só cria arquivos ausentes. Publicação por hard link impede sobrescrever uma edição
+# concorrente e só torna visível conteúdo completo; temporário fica no mesmo filesystem.
+gera_arquivos_de_contexto() {
+  local nome destino temporario
+  for nome in AGENTS CLAUDE; do
+    destino="$RAIZ_PROJETO/$nome.md"
+    [ ! -e "$destino" ] && [ ! -L "$destino" ] || continue
+    temporario=$(mktemp "$RAIZ_PROJETO/.contexto.XXXXXX") || return 1
+    if ! cat "$RAIZ_PROJETO/modelos/$nome.md.tmpl" >"$temporario" ||
+        ! chmod 644 "$temporario"; then
+      rm -f "$temporario"
+      return 1
+    fi
+    if ! ln "$temporario" "$destino" 2>/dev/null; then
+      rm -f "$temporario"
+      [ -e "$destino" ] || [ -L "$destino" ] || return 1
+    else
+      rm -f "$temporario"
+    fi
+  done
+}
 
 instala_comando() {
   $SUDO ln -sf "$RAIZ_PROJETO/setup/asimov.sh" /usr/local/bin/asimov
@@ -49,6 +71,7 @@ mostra_resumo() {
     campo "Copiloto" "$(ia_nome)$([ -n "$(env_get IA_CONTA)" ] && printf ' · %s' "$(env_get IA_CONTA)")"
   fi
   campo "Pasta" "$RAIZ_PROJETO"
+  campo "Assistentes" "AGENTS.md e CLAUDE.md disponíveis nesta pasta"
   campo "Uso" "$([ "$(env_get MODO_INSTALACAO)" = revenda ] && echo 'revenda para empresas clientes' || echo 'só a minha empresa')"
   echo
   resumo_acesso_ao_painel
@@ -67,6 +90,8 @@ mostra_resumo() {
 }
 
 tela_final() {
+  gera_arquivos_de_contexto || erro_fatal "Não foi possível preparar o contexto dos assistentes" \
+    "A instalação está salva. Confira $LOG e rode novamente."
   if ! estado_tem instalacao_concluida; then
     secao "Finalizando"
     PASSO_ATUAL=0

@@ -207,3 +207,14 @@ o backup para conciliação, sem apagar alterações posteriores.
 Testes adicionais: `bash setup/testes/simula_retomada.sh`,
 `python3 setup/testes/test_sessao.py` (tmux) e `bash setup/testes/caddy_real.sh`
 (Docker em Linux). Os testes usam configurações e serviços fictícios isolados.
+
+## Contexto para evoluir os agentes
+
+Desde a v0.33.2, a instalação cria `AGENTS.md` e `CLAUDE.md` na pasta do projeto.
+`asimov atualizar` recupera arquivos ausentes em instalações anteriores, sem trocar
+arquivos personalizados. Depois, abra uma nova sessão do assistente nessa pasta.
+
+O contexto orienta a edição de `prompts/<empresa>/<agente>/persona.md` e do resumo
+de handoff, os comandos disponíveis e a preservação de dados e serviços da VPS.
+Esta distribuição usa imagens prontas: desenvolver ferramentas ou alterar o código
+da plataforma exige o repositório de desenvolvimento e a publicação de uma imagem.

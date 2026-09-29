@@ -16,7 +16,9 @@ jobs:
       - name: Shellcheck
         run: |
           uvx --from shellcheck-py shellcheck -x -P SCRIPTDIR \
-            install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh setup/testes/simula_retomada.sh setup/testes/caddy_real.sh
+            install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh setup/testes/simula_retomada.sh setup/testes/caddy_real.sh setup/testes/simula_contexto.sh
+      - name: Contexto na instalação e atualização
+        run: bash setup/testes/simula_contexto.sh
       - name: Onboarding simulado
         run: ASIMOV_TTY=setup/testes/respostas.txt bash setup/testes/simula_onboarding.sh
       - name: Atualização simulada, com volta de versão

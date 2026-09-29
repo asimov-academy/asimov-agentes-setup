@@ -55,7 +55,7 @@ cp "$TEST_INSTALL" "$2"
             if condicao(): return
             if select.select([fd], [], [], 0.1)[0]:
                 try: os.read(fd, 65536)
-                except OSError: break
+                except OSError: time.sleep(0.05)
         raise AssertionError('sessão não chegou ao estado esperado')
     try:
         primeiro, fd = abrir()

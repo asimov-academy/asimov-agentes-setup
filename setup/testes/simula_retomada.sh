@@ -107,13 +107,14 @@ echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
   HOST_CONFIG="$TEMP_TESTE/Caddyfile"
   printf 'outro.exemplo.com.br { respond "preservado" }\n' >"$HOST_CONFIG"
   cp "$HOST_CONFIG" "$TEMP_TESTE/original"
-  VALIDACAO=1 RELOAD=0
+  VALIDACAO=1 RELOAD=0 ATIVO=0
   caddy() { return "$VALIDACAO"; }
   systemctl() {
     case "$1" in
-      is-active) return 0 ;;
+      is-active) return "$ATIVO" ;;
       show) echo "{ argv[]=caddy run --config $HOST_CONFIG --adapter caddyfile ; }" ;;
       reload) return "$RELOAD" ;;
+      start) touch "$TEMP_TESTE/iniciou"; return 0 ;;
     esac
   }
   if integra_caddy_host "$HOST_CONFIG"; then exit 1; fi
@@ -131,8 +132,13 @@ echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
   cmp "$HOST_CONFIG" "$TEMP_TESTE/integrado"
   # Reload indisponível conserva a transação; próxima execução restaura e limpa.
   estado_tem proxy_transacao
-  RELOAD=0
+  printf '# site acrescentado depois\n' >>"$HOST_CONFIG"
+  if restaura_proxy 2>/dev/null; then exit 1; fi
+  grep -q 'site acrescentado depois' "$HOST_CONFIG"
+  cp "$TEMP_TESTE/integrado" "$HOST_CONFIG"
+  RELOAD=0 ATIVO=1
   restaura_proxy
+  [ -f "$TEMP_TESTE/iniciou" ]
   if estado_tem proxy_transacao; then exit 1; fi
   cmp "$HOST_CONFIG" "$TEMP_TESTE/integrado"
 )

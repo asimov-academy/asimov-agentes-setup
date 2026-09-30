@@ -41,11 +41,18 @@ temp=""
 segura_tela() {
   local codigo=$?
   [ -n "$temp" ] && rm -rf "$temp"
-  if [ "$codigo" != 0 ] && [ -n "${ASIMOV_SESSAO:-}" ]; then
+  [ -n "${ASIMOV_SESSAO:-}" ] || return 0
+  if [ "$codigo" != 0 ]; then
     echo
     echo "A instalação parou. O motivo está na mensagem acima."
-    read -r -p "Enter para fechar esta tela. " _ </dev/tty 2>/dev/null || sleep 60
+  elif [ -z "${ASIMOV_ATUALIZAR:-}" ]; then
+    return 0
   fi
+  # A atualização termina no resumo, sem menu: sem a pausa, dava certo e a tela fechava do mesmo
+  # jeito, com o mesmo `[exited]` de quando dava errado.
+  # A pergunta fora do `read -p`: ele a escreve no stderr, e o `2>/dev/null` a escondia.
+  printf 'Enter para fechar esta tela. '
+  read -r _ </dev/tty 2>/dev/null || sleep 60
 }
 trap segura_tela EXIT
 
@@ -63,7 +70,8 @@ unset ASIMOV_VERSAO
 
 if [ -f "$DESTINO/setup/instalar.sh" ] && [ -z "${ASIMOV_ATUALIZAR:-}" ] &&
     grep -q '^instalacao_concluida=' "$ASIMOV_ESTADO_DIR/estado" 2>/dev/null; then
-  exec bash "$DESTINO/setup/instalar.sh"
+  bash "$DESTINO/setup/instalar.sh"
+  exit 0
 fi
 
 command -v curl >/dev/null 2>&1 || { echo "Instale o curl: apt-get install -y curl"; exit 1; }
@@ -101,4 +109,6 @@ if [ -f "$DESTINO/setup/instalar.sh" ]; then
 fi
 mkdir -p "$DESTINO"
 tar -xzf "$temp/pacote.tar.gz" -C "$DESTINO" --strip-components=1 --no-same-owner
-exec bash "$DESTINO/setup/instalar.sh"
+# Sem `exec`: ele trocava este processo pelo setup, e a `segura_tela` ia junto. Todo erro do setup
+# dentro do tmux (inclusive "não subiu saudável") fechava a tela antes de alguém ler.
+bash "$DESTINO/setup/instalar.sh"

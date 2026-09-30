@@ -28,6 +28,8 @@ x-backend: &backend
     - conhecimento:/var/lib/asimov/conhecimento
     # Um socket por empresa para chamar as ferramentas próprias no contêiner dela (fase 12).
     - /var/lib/asimov/ferramentas-sock:/var/lib/asimov/ferramentas-sock
+    # Arquivos do link de envio (`asimov agente envio`); o host move para a pasta do agente.
+    - /var/lib/asimov/envios:/var/lib/asimov/envios
   depends_on:
     postgres:
       condition: service_healthy

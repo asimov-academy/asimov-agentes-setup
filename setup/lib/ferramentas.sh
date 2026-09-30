@@ -29,9 +29,9 @@ imagem_backend() {
 # que o proxy de saída recusa (são públicos e levariam ao SSH e às outras aplicações da VPS).
 prepara_ferramentas() {
   local ips publico
-  $SUDO mkdir -p "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS"
-  $SUDO chown 1000:1000 "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS"
-  $SUDO chmod 750 "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS"
+  $SUDO mkdir -p "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS" "$PASTA_ENVIOS"
+  $SUDO chown 1000:1000 "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS" "$PASTA_ENVIOS"
+  $SUDO chmod 750 "$PASTA_FERRAMENTAS" "$PASTA_SOCKETS" "$PASTA_TESTES_FERRAMENTAS" "$PASTA_ENVIOS"
   publico=$(ip_publico)
   ips=$({ hostname -I 2>/dev/null || true; } | tr ' ' '\n' | grep -v '^$' || true)
   ips=$(printf '%s\n%s\n' "$publico" "$ips" | grep -v '^$' | sort -u | paste -sd, - || true)

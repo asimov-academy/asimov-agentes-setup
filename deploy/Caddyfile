@@ -9,8 +9,9 @@
 
 {$ASIMOV_ESQUEMA:https}://{$SUBDOMINIO_BOT} {
 	# Só webhooks, health e o que a Meta exige para publicar o app (a URL da política de
-	# privacidade e o ícone) ficam públicos. /admin responde apenas em 127.0.0.1:8000.
-	@publico path /health /webhook/* /privacidade* /icone-app.png
+	# privacidade e o ícone) ficam públicos, mais o link de envio de arquivos (uso único, 30 min).
+	# /admin responde apenas em 127.0.0.1:8000.
+	@publico path /health /webhook/* /privacidade* /icone-app.png /envio/*
 	handle @publico {
 		reverse_proxy api:8000
 	}

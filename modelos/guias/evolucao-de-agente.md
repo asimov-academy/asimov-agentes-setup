@@ -2,11 +2,12 @@
 
 Arquivo da plataforma, em `modelos/guias/`: `asimov atualizar` o substitui. Regra local do operador vai no `AGENTS.md`.
 
-O operador criou um agente e entregou documentos da análise de conversas da empresa: normalmente
-`system-prompt.md`, `especificacao-agente.yaml`, `casos-de-teste.md`, `diagnostico-atendimento.md`,
-`mapa-atendimento.html` e `manifesto-analise.json`, às vezes num ZIP dentro de outro ZIP. Reconheça
-cada um pelo conteúdo, não pelo nome. Receber os arquivos já é o pedido: conduza o fluxo abaixo sem
-pedir que o operador explique o processo.
+O operador criou um agente e quer evoluí-lo com a análise de conversas da empresa, que chega em
+documentos: normalmente `system-prompt.md`, `especificacao-agente.yaml`, `casos-de-teste.md`,
+`diagnostico-atendimento.md`, `mapa-atendimento.html` e `manifesto-analise.json`, às vezes num ZIP
+dentro de outro ZIP. Reconheça cada um pelo conteúdo, não pelo nome. Ouvir que ele quer evoluir um
+agente com a análise, ou receber os arquivos, já é o pedido: conduza o fluxo abaixo sem pedir que
+ele explique o processo.
 
 ## 0. Achar o agente e retomar
 
@@ -16,9 +17,13 @@ pedir que o operador explique o processo.
    `agentes/<empresa_id>/<agente_id>/`. Trabalhe só nela e no agente escolhido.
 3. Leia `evolucao.md` e `decisoes.md` dessa pasta. Se já houver fase registrada, continue dela:
    não repita pergunta respondida nem refaça etapa concluída.
-4. `asimov agente receber <ref> <arquivo ou pasta>...` guarda o pacote original em `recebido/<data>/`
-   e abre os ZIPs (inclusive aninhados) em `recebido/<data>/aberto/`. Nunca apague nem edite o
-   original.
+4. O pacote. Se o operador disse onde o arquivo está na VPS:
+   `asimov agente receber <ref> <arquivo ou pasta>`. Se ainda não está na VPS (o normal), rode
+   `asimov agente envio <ref>` e passe o link ao operador: "abra no navegador, escolha o ZIP da
+   análise e toque em Enviar". Depois `asimov agente receber <ref> --esperar 110`; se ainda não
+   chegou, rode de novo. Não peça SFTP, `scp` nem caminho de pasta. O receber guarda o original em
+   `recebido/<data>/original/` e abre os ZIPs (inclusive aninhados) em `recebido/<data>/aberto/`.
+   Nunca apague nem edite o original.
 5. `asimov agente contexto <ref>` devolve, em JSON, a configuração efetiva: canal, situação, modelos,
    ferramentas básicas ligadas, prompt atual e versão. É a fonte de verdade sobre o que existe.
 

@@ -25,6 +25,7 @@ source "$REPO/setup/lib/evolucao.sh"
 # shellcheck source=setup/lib/final.sh
 source "$REPO/setup/lib/final.sh"
 PASTA_FERRAMENTAS="$TEMP_TESTE/ferramentas"
+PASTA_ENVIOS="$TEMP_TESTE/envios"
 PASTA_SOCKETS="$TEMP_TESTE/sock"
 PASTA_TESTES_FERRAMENTAS="$TEMP_TESTE/ferramentas-teste"
 # shellcheck source=setup/lib/ferramentas.sh
@@ -50,6 +51,7 @@ api() {
     "POST /admin/ferramentas-proprias/contrato") API_RESPOSTA=$(jq -c '{contrato: .contrato}' <<<"$3") ;;
     "GET /admin/clientes/c1/agentes/a1/ferramentas-proprias") API_RESPOSTA=${FERRAMENTAS_ATIVAS:-[]} ;;
     "POST /admin/clientes/c1/agentes/a1/ferramentas-proprias/consultar_agenda/versoes") API_STATUS=201; API_RESPOSTA='{"nome":"consultar_agenda","versao":1}' ;;
+    "POST /admin/clientes/c1/agentes/a1/envios") API_RESPOSTA='{"url":"https://bot.exemplo.com.br/envio/abc","validade_minutos":30}' ;;
     "GET /admin/ferramentas-proprias/empresas") API_RESPOSTA='["11111111-2222-3333-4444-555555555555"]' ;;
     *) API_STATUS=404; API_RESPOSTA='{"detail":"rota falsa"}' ;;
   esac
@@ -92,6 +94,22 @@ recebido=$(head -1 "$TEMP_TESTE/saida")
 [ -f "$RAIZ_PROJETO/$recebido/aberto/files/entrega-agente/system-prompt.md" ] || falhou 'ZIP aninhado não foi aberto'
 grep -q 'especificacao-agente.yaml' "$TEMP_TESTE/saida" || falhou 'receber não listou os documentos'
 echo 'ok: receber guarda o original e abre o ZIP dentro do ZIP'
+
+# Pelo link de envio: o aluno manda pelo navegador, e o receber sem arquivo pega o que chegou.
+fluxo_agente envio loja-exemplo/ana >"$TEMP_TESTE/saida"
+grep -q 'https://bot.exemplo.com.br/envio/abc' "$TEMP_TESTE/saida" || falhou 'envio não mostrou o link'
+if (fluxo_agente receber loja-exemplo/ana) 2>"$TEMP_TESTE/erro" >/dev/null; then falhou 'receber sem nada passou'; fi
+grep -q 'asimov agente envio' "$TEMP_TESTE/erro" || falhou 'receber vazio não diz como gerar o link'
+mkdir -p "$PASTA_ENVIOS/c1/a1/20260930-1200-abc" "$PASTA_ENVIOS/c1/a1/20260930-1201-def.parcial"
+cp "$TEMP_TESTE/pacote/files.zip" "$PASTA_ENVIOS/c1/a1/20260930-1200-abc/"
+printf 'pela metade' >"$PASTA_ENVIOS/c1/a1/20260930-1201-def.parcial/files.zip"
+sleep 1
+fluxo_agente receber loja-exemplo/ana >"$TEMP_TESTE/saida"
+recebido=$(head -1 "$TEMP_TESTE/saida")
+[ -f "$RAIZ_PROJETO/$recebido/aberto/files/entrega-agente/system-prompt.md" ] || falhou 'o que veio pelo link não foi aberto'
+[ ! -e "$PASTA_ENVIOS/c1/a1/20260930-1200-abc" ] || falhou 'envio recebido ficou na pasta de chegada'
+[ -e "$PASTA_ENVIOS/c1/a1/20260930-1201-def.parcial" ] || falhou 'envio pela metade foi mexido'
+echo 'ok: link de envio mostrado e o que chegou por ele vai para a pasta do agente'
 
 printf 'Você é a Ana, do pacote.\n' >"$TEMP_TESTE/persona.md"
 fluxo_agente prompt aplicar loja-exemplo/ana "$TEMP_TESTE/persona.md" --motivo pacote >"$TEMP_TESTE/saida"

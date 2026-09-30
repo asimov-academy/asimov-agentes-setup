@@ -6,6 +6,7 @@
 # Saída pensada para quem lê é uma IA: texto curto ou JSON, erro no stderr e código de saída 1.
 
 DIR_AGENTES="$RAIZ_PROJETO/agentes"
+PASTA_ENVIOS="${PASTA_ENVIOS:-/var/lib/asimov/envios}"
 
 ev_erro() {
   printf 'erro: %s\n' "$1" >&2
@@ -104,17 +105,53 @@ ev_preparar() {
 }
 
 # asimov agente receber REF ARQUIVO...: guarda o original e abre os ZIPs, inclusive os de dentro.
+# asimov agente envio REF: link de uso único para o aluno mandar o pacote pelo navegador, sem SFTP.
+ev_envio() {
+  ev_resolve "${1:-}"
+  ev_api POST "$(ev_caminho)/envios"
+  [ "$API_STATUS" = 200 ] || ev_erro "$(detalhe_erro "$API_RESPOSTA")"
+  printf 'Link de envio para %s (%s), vale %s minutos e uma vez só:\n\n  %s\n\n' "$EV_NOME" "$EV_EMPRESA" \
+    "$(jq -r '.validade_minutos' <<<"$API_RESPOSTA")" "$(jq -r '.url' <<<"$API_RESPOSTA")"
+  printf 'Abra no navegador, escolha o ZIP da análise e toque em Enviar. Depois: asimov agente receber %s --esperar 110\n' "${1:-}"
+}
+
+# asimov agente receber REF [--esperar SEGUNDOS] [ARQUIVO...]: guarda o pacote original na pasta do
+# agente e abre os ZIPs, inclusive os de dentro. Sem arquivo, pega o que chegou pelo link de envio.
 ev_receber() {
-  local ref=${1:-} destino item
+  local ref=${1:-} destino item espera=0 chegada pasta
+  local -a arquivos=() envios=()
   shift || true
-  [ "$#" -gt 0 ] || ev_erro "diga quais arquivos: asimov agente receber <ref> <arquivo ou pasta>..."
-  for item in "$@"; do
+  if [ "${1:-}" = --esperar ]; then
+    [[ "${2:-}" =~ ^[0-9]+$ ]] || ev_erro "use: asimov agente receber <ref> --esperar <segundos>"
+    espera=$2
+    shift 2
+  fi
+  arquivos=("$@")
+  for item in "${arquivos[@]}"; do
     [ -e "$item" ] || ev_erro "não achei $item"
   done
   ev_preparar "$ref" >/dev/null
+  if [ "${#arquivos[@]}" -eq 0 ]; then
+    chegada="$PASTA_ENVIOS/$EV_CLIENTE/$EV_AGENTE"
+    while :; do
+      envios=()
+      for pasta in "$chegada"/*/; do
+        [ -d "$pasta" ] || continue
+        case "$pasta" in *.parcial/) continue ;; esac
+        envios+=("${pasta%/}")
+      done
+      [ "${#envios[@]}" -eq 0 ] || break
+      [ "$espera" -gt 0 ] || ev_erro "nada chegou pelo link ainda. Gere um com: asimov agente envio $ref"
+      sleep 3
+      espera=$((espera > 3 ? espera - 3 : 0))
+    done
+    for pasta in "${envios[@]}"; do
+      for item in "$pasta"/*; do [ -e "$item" ] && arquivos+=("$item"); done
+    done
+  fi
   destino="$(ev_pasta)/recebido/$(date '+%Y%m%d-%H%M%S')"
   mkdir -p "$destino/original" "$destino/aberto"
-  for item in "$@"; do
+  for item in "${arquivos[@]}"; do
     cp -R "$item" "$destino/original/"
   done
   cp -R "$destino/original/." "$destino/aberto/"
@@ -134,6 +171,7 @@ while True:
         with zipfile.ZipFile(z) as arquivo:
             arquivo.extractall(alvo)
 PY
+  for pasta in "${envios[@]}"; do $SUDO rm -rf "$pasta"; done
   printf '%s\n' "${destino#"$RAIZ_PROJETO"/}"
   (cd "$destino/aberto" && find . -type f ! -name '*.zip' | sed 's#^\./#  #' | sort)
 }
@@ -229,7 +267,8 @@ asimov agente: evoluir um agente a partir do pacote de análise (guia: modelos/g
   asimov agente listar                                   referências dos agentes (empresa/agente)
   asimov agente contexto <ref>                           configuração efetiva em JSON, sem credenciais
   asimov agente preparar <ref>                           cria a pasta privada do agente e mostra o caminho
-  asimov agente receber <ref> <arquivo ou pasta>...      guarda o pacote e abre os ZIPs
+  asimov agente envio <ref>                              link para o aluno mandar o pacote pelo navegador
+  asimov agente receber <ref> [--esperar <s>] [arquivo...]  guarda o pacote (do link ou do disco) e abre os ZIPs
   asimov agente prompt ver <ref>                         prompt aplicado agora
   asimov agente prompt aplicar <ref> <arquivo> --motivo "..."
   asimov agente prompt historico <ref>                   versões guardadas
@@ -249,6 +288,7 @@ fluxo_agente() {
     listar) ev_listar ;;
     contexto) ev_contexto "$@" ;;
     preparar) ev_preparar "$@" ;;
+    envio) ev_envio "$@" ;;
     receber) ev_receber "$@" ;;
     prompt) ev_prompt "$@" ;;
     conversa) ev_conversa "$@" ;;

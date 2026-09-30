@@ -76,7 +76,11 @@ services:
     environment:
       <<: *backend-env
       PAINEL_ATIVO: ""
+      # Até 20 jobs juntos mais os crons: o padrão de 15 conexões por processo não cabia.
+      BANCO_CONEXOES_EXTRAS: "20"
     command: ["arq", "app.worker.Configuracao"]
+    # O worker espera o turno em andamento por 120 s ao receber SIGTERM (`job_completion_wait`).
+    stop_grace_period: 150s
 
   # Painel do operador em app.<dominio>. Imagem privada, a única com o front dentro, aberta pelo
   # token da trilha (setup/lib/acesso.sh). Sobe pelo perfil `painel`, ligado por PAINEL_ATIVO=1 no

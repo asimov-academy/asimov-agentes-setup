@@ -3,7 +3,16 @@
 # pelo setup. Sem a variável o Compose para com erro, de propósito: `latest` na VPS faria duas
 # instalações iguais rodarem versões diferentes.
 
+# Log de contêiner com teto: o json-file padrão do Docker cresce sem limite (o worker registra dois
+# crons por minuto, a API e a WAHA cada mensagem) e enchia o disco da VPS, parando o Postgres.
+x-log: &log
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-backend: &backend
+  logging: *log
   image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
   env_file: ../.env
   environment: &backend-env
@@ -27,6 +36,7 @@ x-backend: &backend
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    logging: *log
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -41,6 +51,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    logging: *log
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis:/data
@@ -80,6 +91,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    logging: *log
     ports:
       - "${ASIMOV_HTTP_BIND:-80}:80"
       - "${ASIMOV_HTTPS_BIND:-443}:443"
@@ -140,6 +152,7 @@ services:
   waha:
     # Imagem só com a engine GOWS (menor). setup/lib/waha.sh grava a tag arm quando a VPS é arm.
     image: devlikeapro/waha:${VERSAO_WAHA:-gows-2026.8.2}
+    logging: *log
     environment:
       WHATSAPP_DEFAULT_ENGINE: GOWS
       WAHA_API_KEY: ${WAHA_API_KEY}

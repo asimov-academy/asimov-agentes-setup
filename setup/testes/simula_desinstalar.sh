@@ -156,7 +156,9 @@ echo 'ok: backup que falha não deixa desinstalar sem perguntar'
 
 # Script de deploy/ que o systemd ou o setup chamam vai versionado executável.
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-  ! git -C "$REPO" ls-files -s 'deploy/*.sh' | grep -v '^100755'
+  if git -C "$REPO" ls-files -s 'deploy/*.sh' | grep -v '^100755'; then
+    echo 'FALHOU: script de deploy/ versionado sem bit de execução'; exit 1
+  fi
   echo 'ok: scripts de deploy/ versionados executáveis'
 fi
 

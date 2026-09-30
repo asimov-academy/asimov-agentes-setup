@@ -42,7 +42,9 @@ sobe_api() { dc up -d api worker; }
 # `tela_instalacao`, que já desenha o passo e manda a saída para o log.
 instala_waha() {
   env_set_se_vazio WAHA_API_KEY "$(openssl rand -hex 32)"
-  env_set VERSAO_WAHA "$(versao_waha)"
+  # Só na instalação nova: `asimov atualizar` passa por aqui de novo, e gravar a base rebaixava a
+  # WAHA que o timer tinha subido, sem esperar os números voltarem. Quem troca a versão é o timer.
+  env_set_se_vazio VERSAO_WAHA "$(versao_waha)"
   command -v qrencode >/dev/null 2>&1 || apt_instala qrencode
   sobe_waha || return 1
   # A imagem envelhece rápido (o WhatsApp muda o protocolo). O timer é conforto: falhar aqui não

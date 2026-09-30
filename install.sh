@@ -22,6 +22,19 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${ASIMOV_TTY:-}" ] && [ -z "${TMUX:-}" ] && [ -
     fi
   fi
   command -v tmux >/dev/null || { echo "Instale tmux e rode novamente para ter uma sessão recuperável."; exit 1; }
+  # Sessão que só espera o Enter do fim (segura_tela) já terminou: reanexar a ela mostrava a tela
+  # velha e o Enter fechava sem atualizar nada. Essa é fechada, e o comando segue do zero.
+  esperando="$ASIMOV_ESTADO_DIR/sessao-esperando-enter"
+  if [ -f "$esperando" ] && tmux has-session -t asimov-instalacao 2>/dev/null; then
+    pid_antigo=$(cat "$esperando" 2>/dev/null || true)
+    tmux kill-session -t asimov-instalacao 2>/dev/null || true
+    # O processo antigo segura a trava da instalação até morrer.
+    for _ in $(seq 1 50); do
+      if [ -z "$pid_antigo" ] || ! kill -0 "$pid_antigo" 2>/dev/null; then break; fi
+      sleep 0.1
+    done
+  fi
+  rm -f "$esperando"
   if tmux has-session -t asimov-instalacao 2>/dev/null; then exec tmux attach -t asimov-instalacao; fi
   mkdir -p "$ASIMOV_ESTADO_DIR"; chmod 700 "$ASIMOV_ESTADO_DIR"
   sessao_script="$ASIMOV_ESTADO_DIR/instalador-sessao.sh"
@@ -50,9 +63,16 @@ segura_tela() {
   fi
   # A atualização termina no resumo, sem menu: sem a pausa, dava certo e a tela fechava do mesmo
   # jeito, com o mesmo `[exited]` de quando dava errado.
+  # A marca diz ao próximo install.sh que esta sessão só espera o Enter e pode ser fechada. Fechada
+  # por ele, o HUP sai direto: sem o trap, o `read` falhava no terminal morto e o `sleep 60`
+  # seguia segurando a trava.
+  trap - EXIT
+  trap 'rm -f "$ASIMOV_ESTADO_DIR/sessao-esperando-enter"; exit "$codigo"' HUP TERM
+  echo "$$" >"$ASIMOV_ESTADO_DIR/sessao-esperando-enter" 2>/dev/null || true
   # A pergunta fora do `read -p`: ele a escreve no stderr, e o `2>/dev/null` a escondia.
   printf 'Enter para fechar esta tela. '
   read -r _ </dev/tty 2>/dev/null || sleep 60
+  rm -f "$ASIMOV_ESTADO_DIR/sessao-esperando-enter"
 }
 trap segura_tela EXIT
 

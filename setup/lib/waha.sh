@@ -105,7 +105,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 Environment=HOME=$HOME
-ExecStart=$RAIZ_PROJETO/deploy/atualiza_waha.sh
+ExecStart=/bin/bash $RAIZ_PROJETO/deploy/atualiza_waha.sh
 UNIDADE
   $SUDO tee /etc/systemd/system/asimov-waha.timer >/dev/null <<UNIDADE || return 1
 [Unit]

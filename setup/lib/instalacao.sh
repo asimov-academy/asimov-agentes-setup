@@ -96,6 +96,8 @@ espera_url() {
 
 # instala_timer_backup: dump do banco e cópia do .env todo dia de madrugada, com retenção.
 # Roda no host, como o timer da WAHA: quem fala com o Docker é o host, nunca um contêiner.
+# ExecStart pelo bash: com o script sem bit de execução, o systemd parava em 203/EXEC todo dia e
+# nem o backup_falhou chegava a ser gravado. A unidade é regravada a cada `asimov atualizar`.
 instala_timer_backup() {
   local quando="*-*-* 03:20:00 America/Sao_Paulo"
   command -v systemctl >/dev/null 2>&1 || return 0
@@ -111,7 +113,7 @@ Requires=docker.service
 [Service]
 Type=oneshot
 Environment=HOME=$HOME
-ExecStart=$RAIZ_PROJETO/deploy/backup.sh
+ExecStart=/bin/bash $RAIZ_PROJETO/deploy/backup.sh
 UNIDADE
   $SUDO tee /etc/systemd/system/asimov-backup.timer >/dev/null <<UNIDADE || return 1
 [Unit]

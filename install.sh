@@ -51,6 +51,7 @@ fi
 # Dentro da sessão do tmux, sair com erro fechava a tela junto e a mensagem sumia: o operador só via
 # `[exited]` (aconteceu com a tag do instalador ainda por sair e com duas instalações ao mesmo tempo).
 temp=""
+termina_no_menu=""
 segura_tela() {
   local codigo=$?
   [ -n "$temp" ] && rm -rf "$temp"
@@ -58,11 +59,12 @@ segura_tela() {
   if [ "$codigo" != 0 ]; then
     echo
     echo "A instalação parou. O motivo está na mensagem acima."
-  elif [ -z "${ASIMOV_ATUALIZAR:-}" ]; then
+  elif [ -n "$termina_no_menu" ]; then
     return 0
   fi
-  # A atualização termina no resumo, sem menu: sem a pausa, dava certo e a tela fechava do mesmo
-  # jeito, com o mesmo `[exited]` de quando dava errado.
+  # Instalação nova e atualização terminam no resumo, sem menu: sem a pausa, dava certo e a tela
+  # fechava do mesmo jeito, com o mesmo `[exited]` de quando dava errado, levando junto o endereço
+  # e o código de primeiro acesso do painel. Só quem saiu do menu com "Sair" fecha direto.
   # A marca diz ao próximo install.sh que esta sessão só espera o Enter e pode ser fechada. Fechada
   # por ele, o HUP sai direto: sem o trap, o `read` falhava no terminal morto e o `sleep 60`
   # seguia segurando a trava.
@@ -90,6 +92,7 @@ unset ASIMOV_VERSAO
 
 if [ -f "$DESTINO/setup/instalar.sh" ] && [ -z "${ASIMOV_ATUALIZAR:-}" ] &&
     grep -q '^instalacao_concluida=' "$ASIMOV_ESTADO_DIR/estado" 2>/dev/null; then
+  termina_no_menu=1
   bash "$DESTINO/setup/instalar.sh"
   exit 0
 fi

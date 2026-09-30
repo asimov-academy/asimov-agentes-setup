@@ -79,13 +79,13 @@ cp "$TEST_INSTALL" "$2"
         subprocess.run(['tmux', 'kill-server'], env=env, check=False, capture_output=True)
 
 
-def fim_na_tela(atualizar, codigo):
-    """O fim do setup fica na tela do tmux até o Enter: o erro sempre, o sucesso na atualização."""
+def fim_na_tela(atualizar, codigo, concluida=True):
+    """O fim do setup fica na tela do tmux até o Enter, menos quando o setup terminou no menu."""
     with tempfile.TemporaryDirectory(prefix='asimov-tela-') as nome:
         pasta = Path(nome)
         estado = pasta / 'estado'
         estado.mkdir()
-        (estado / 'estado').write_text('instalacao_concluida=teste\n')
+        (estado / 'estado').write_text('instalacao_concluida=teste\n' if concluida else '')
         instalar = f'#!/usr/bin/env bash\necho fim-do-setup\nexit {codigo}\n'.encode()
         projeto = pasta / 'projeto'
         (projeto / 'setup').mkdir(parents=True)
@@ -114,6 +114,13 @@ def fim_na_tela(atualizar, codigo):
             return r.stdout if r.returncode == 0 else None
         try:
             subprocess.run(['tmux', 'new-session', '-d', '-s', 'fim', comando], env=env, check=True)
+            if concluida and not atualizar and codigo == 0:
+                # Saiu do menu com "Sair": a tela fecha sem pedir Enter.
+                limite = time.monotonic()+15
+                while tela() is not None:
+                    assert time.monotonic() < limite, f'o menu pediu Enter para sair: {tela()!r}'
+                    time.sleep(0.1)
+                return
             limite = time.monotonic()+15
             while 'Enter para fechar' not in (texto := tela() or ''):
                 assert tela() is not None, 'a tela fechou antes de alguém ler'
@@ -133,7 +140,10 @@ def fim_na_tela(atualizar, codigo):
 fim_na_tela(atualizar=False, codigo=3)
 fim_na_tela(atualizar=True, codigo=3)
 fim_na_tela(atualizar=True, codigo=0)
-print('ok: erro e fim da atualização ficam na tela do tmux até o Enter')
+# Instalação nova que deu certo: o resumo final (com o código do painel) fica na tela.
+fim_na_tela(atualizar=False, codigo=0, concluida=False)
+fim_na_tela(atualizar=False, codigo=0)
+print('ok: erro, fim da instalação e fim da atualização ficam na tela do tmux até o Enter')
 
 
 def sessao_esperando_enter():

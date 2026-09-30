@@ -130,6 +130,22 @@ grep -q 'reverse_proxy 127.0.0.1:18081' "$RAIZ_PROJETO/deploy/proxy-externo.cadd
 ( painel_recarrega_caddy() { exit 99; }; painel_garante_caddy )
 echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
 
+# Painel que não sobe (pull falhou por rede ou disco) não fica ligado no .env nem no Caddy.
+(
+  env_set PAINEL_ATIVO ""
+  env_set DOMINIO_BASE exemplo.com.br
+  acesso_garante() { return 0; }
+  pergunta() { printf -v "$1" '%s' app; }
+  painel_espera_dns() { return 0; }
+  CINZA="" NORMAL=""
+  dc() { echo "dc $*" >>"$TEMP_TESTE/dc-painel"; [ "$1" != pull ]; }
+  if painel_liga >/dev/null; then echo 'FALHOU: painel que não subiu virou sucesso'; exit 1; fi
+  [ -z "$(env_get PAINEL_ATIVO)" ] || { echo 'FALHOU: PAINEL_ATIVO ficou ligado'; exit 1; }
+  ! grep -q 'app.exemplo.com.br' "$ARQ_CADDY_PAINEL" || { echo 'FALHOU: bloco do painel ficou no Caddy'; exit 1; }
+  grep -q '^dc rm -f painel' "$TEMP_TESTE/dc-painel" || { echo 'FALHOU: contêiner do painel ficou para trás'; exit 1; }
+)
+echo 'ok: painel que não sobe é desfeito'
+
 # Integração no host: invalidar antes de escrever, rollback no reload e recuperar interrupção.
 (
   HOST_CONFIG="$TEMP_TESTE/Caddyfile"

@@ -45,10 +45,17 @@ prepara_rede() {
     env_set ASIMOV_HTTP_BIND "127.0.0.1:$(env_get ASIMOV_PORTA_HTTP)"
     env_set ASIMOV_HTTPS_BIND "127.0.0.1:$(env_get ASIMOV_PORTA_HTTPS)"
     env_set ASIMOV_ESQUEMA http
+    # Atrás do proxy do host, todo pedido chega ao Caddy pelo gateway da rede do Docker. Sem confiar
+    # nele, o Caddy trocava o X-Forwarded-For do host pelo gateway, todo visitante tinha o mesmo IP
+    # e cinco senhas erradas de qualquer um trancavam o login do operador. Seguro só aqui: as portas
+    # estão presas em 127.0.0.1, e só o host alcança o Caddy.
+    env_set ASIMOV_PROXIES_CONFIAVEIS private_ranges
   else
     env_set ASIMOV_HTTP_BIND 80
     env_set ASIMOV_HTTPS_BIND 443
     env_set ASIMOV_ESQUEMA https
+    # No modo próprio, não: cliente IPv6 entra pelo docker-proxy com o IP do gateway e forjaria o XFF.
+    env_set ASIMOV_PROXIES_CONFIAVEIS 127.0.0.1/32
   fi
 }
 

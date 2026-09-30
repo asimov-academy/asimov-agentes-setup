@@ -1,5 +1,10 @@
 {
 	email {$EMAIL_SSL}
+	# De quem o Caddy aceita o X-Forwarded-For. O setup grava private_ranges só quando o proxy do
+	# host fica na frente (portas em 127.0.0.1); no modo próprio vale só o loopback.
+	servers {
+		trusted_proxies static {$ASIMOV_PROXIES_CONFIAVEIS:127.0.0.1/32}
+	}
 }
 
 {$ASIMOV_ESQUEMA:https}://{$SUBDOMINIO_BOT} {

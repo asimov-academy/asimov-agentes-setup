@@ -87,6 +87,7 @@ services:
       SUBDOMINIO_BOT: ${SUBDOMINIO_BOT}
       EMAIL_SSL: ${EMAIL_SSL}
       ASIMOV_ESQUEMA: ${ASIMOV_ESQUEMA:-https}
+      ASIMOV_PROXIES_CONFIAVEIS: ${ASIMOV_PROXIES_CONFIAVEIS:-127.0.0.1/32}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Bloco do painel, escrito pelo setup quando o operador liga app.<dominio>.

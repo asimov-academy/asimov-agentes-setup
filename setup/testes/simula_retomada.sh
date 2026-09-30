@@ -90,6 +90,9 @@ echo 'ok: volumes sem chaves impedem regeneração'
   [ "$(env_get ASIMOV_PROXY)" = externo ]
   [ "$(env_get ASIMOV_HTTP_BIND)" = 127.0.0.1:18081 ]
   [ "$API_LOCAL" = http://127.0.0.1:8001 ]
+  # Atrás do proxy do host, todo pedido chega pelo gateway da rede do Docker: sem confiar nele, todo
+  # visitante tinha o mesmo IP, e cinco senhas erradas de qualquer um trancavam o painel.
+  [ "$(env_get ASIMOV_PROXIES_CONFIAVEIS)" = private_ranges ]
 )
 echo 'ok: portas de terceiros preservadas e API alternativa'
 (
@@ -99,6 +102,7 @@ echo 'ok: portas de terceiros preservadas e API alternativa'
   escolha() { exit 1; }
   prepara_rede
   [ "$(env_get ASIMOV_PROXY)" = proprio ]
+  [ "$(env_get ASIMOV_PROXIES_CONFIAVEIS)" = 127.0.0.1/32 ]
 )
 echo 'ok: portas do próprio projeto não são conflito'
 

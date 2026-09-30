@@ -294,7 +294,11 @@ avisa_numeros_fora_do_ar() {
 # recriado antes de cada pareamento. Sessão já pareada volta sozinha em segundos.
 prepara_aparelho() {
   local nome=$1 empresa=${2:-} aparelho
-  aparelho=$(printf '%s%s' "$nome" "${empresa:+ ($empresa)}" | cut -c1-40)
+  # O valor vai cru para o .env, que o Compose interpreta: `$`, aspa sem par, contrabarra ou `#`
+  # no nome do agente quebravam todo `dc` depois disso. Saem antes de gravar.
+  aparelho=$(printf '%s%s' "$nome" "${empresa:+ ($empresa)}" |
+    LC_ALL=C tr -d '\000-\037"'"'"'$\\`#' | cut -c1-40)
+  [ -n "${aparelho// /}" ] || aparelho="Asimov Agentes"
   [ "$(env_get WAHA_CLIENT_DEVICE_NAME)" = "$aparelho" ] && return 0
   env_set WAHA_CLIENT_DEVICE_NAME "$aparelho"
   env_set WAHA_CLIENT_BROWSER_NAME Desktop

@@ -77,6 +77,8 @@ env_get() {
 # env_set CHAVE VALOR: grava no .env com permissão 600, substituindo o valor anterior.
 env_set() {
   local temp
+  # Quebra de linha no valor viraria outra chave no .env.
+  case "$2" in *$'\n'* | *$'\r'*) return 1 ;; esac
   if [ ! -f "$ARQ_ENV" ]; then
     install -m 600 /dev/null "$ARQ_ENV"
     mantem_dono "$(dirname "$ARQ_ENV")" "$ARQ_ENV"

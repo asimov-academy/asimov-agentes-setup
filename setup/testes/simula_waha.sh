@@ -36,3 +36,17 @@ instala_waha
   { echo "FALHOU: a atualização rebaixou a WAHA para $(env_get VERSAO_WAHA)"; exit 1; }
 echo 'ok: atualização mantém a versão da WAHA escolhida pelo timer'
 
+# Nome do agente com o que o Compose interpreta no .env: sai limpo, e o .env continua legível.
+prepara_aparelho "Ofertas R\$ 10 \"top\"" "'Loja #1\`" >/dev/null
+aparelho=$(env_get WAHA_CLIENT_DEVICE_NAME)
+case "$aparelho" in
+  *[\$\"\'\`\\#]*) echo "FALHOU: nome do aparelho cru no .env: $aparelho"; exit 1 ;;
+esac
+[ "$aparelho" = "Ofertas R 10 top (Loja 1)" ] || { echo "FALHOU: nome inesperado: $aparelho"; exit 1; }
+prepara_aparelho "\$\$\$" >/dev/null
+[ "$(env_get WAHA_CLIENT_DEVICE_NAME)" = "Asimov Agentes" ] ||
+  { echo "FALHOU: nome vazio no aparelho"; exit 1; }
+# Valor com quebra de linha nunca entra no .env: viraria outra chave.
+if env_set TESTE "$(printf 'a\nINJETADA=1')"; then echo "FALHOU: quebra de linha no .env"; exit 1; fi
+! grep -q '^INJETADA=' "$ARQ_ENV" || { echo "FALHOU: chave injetada no .env"; exit 1; }
+echo 'ok: nome do aparelho e valores do .env não quebram o Compose'

@@ -29,6 +29,10 @@ arquivo="$PASTA_BACKUP/asimov-$carimbo.sql.gz"
 
 parcial_prompts="$PASTA_BACKUP/prompts-$carimbo.tar.gz.parcial"
 parcial_conhecimento="$PASTA_BACKUP/conhecimento-$carimbo.tar.gz.parcial"
+parcial_agentes="$PASTA_BACKUP/agentes-$carimbo.tar.gz.parcial"
+# Pasta privada de evolução de cada agente (pacotes, decisões, ferramentas): só existe depois do
+# primeiro `asimov agente preparar`.
+mkdir -p "$RAIZ_PROJETO/agentes"
 
 if dc exec -T postgres pg_dump -U "$(env_get POSTGRES_USER)" "$(env_get POSTGRES_DB)" 2>>"$LOG" |
   gzip >"$arquivo.parcial"; then
@@ -39,17 +43,20 @@ if dc exec -T postgres pg_dump -U "$(env_get POSTGRES_USER)" "$(env_get POSTGRES
   estado_set backup_em "$(date -Is)"
   if ! cp "$RAIZ_PROJETO/.env" "$PASTA_BACKUP/env-$carimbo" 2>>"$LOG" ||
     ! tar -czf "$parcial_prompts" -C "$RAIZ_PROJETO" prompts 2>>"$LOG" ||
+    ! tar -czf "$parcial_agentes" -C "$RAIZ_PROJETO" agentes 2>>"$LOG" ||
     ! dc exec -T worker tar -czf - -C /var/lib/asimov conhecimento >"$parcial_conhecimento" 2>>"$LOG"; then
     # A retenção lá embaixo só varre `*.tar.gz`: `.parcial` que sobrar aqui fica no disco para
     # sempre, e uma falha que se repete toda noite enche a pasta.
-    rm -f "$parcial_prompts" "$parcial_conhecimento"
+    rm -f "$parcial_prompts" "$parcial_conhecimento" "$parcial_agentes"
     estado_set backup_falhou "$(date -Is)"
-    printf 'backup: dump do banco gravado em %s, mas o .env, os prompts ou o conhecimento falhou\n' "$arquivo" >>"$LOG"
+    printf 'backup: dump do banco gravado em %s, mas o .env, os prompts, os agentes ou o conhecimento falhou\n' "$arquivo" >>"$LOG"
     exit 1
   fi
   mv "$parcial_prompts" "$PASTA_BACKUP/prompts-$carimbo.tar.gz"
   mv "$parcial_conhecimento" "$PASTA_BACKUP/conhecimento-$carimbo.tar.gz"
-  chmod 600 "$PASTA_BACKUP/env-$carimbo" "$PASTA_BACKUP/prompts-$carimbo.tar.gz" "$PASTA_BACKUP/conhecimento-$carimbo.tar.gz"
+  mv "$parcial_agentes" "$PASTA_BACKUP/agentes-$carimbo.tar.gz"
+  chmod 600 "$PASTA_BACKUP/env-$carimbo" "$PASTA_BACKUP/prompts-$carimbo.tar.gz" \
+    "$PASTA_BACKUP/conhecimento-$carimbo.tar.gz" "$PASTA_BACKUP/agentes-$carimbo.tar.gz"
   estado_set backup_falhou ""
   printf 'backup gravado em %s\n' "$arquivo" >>"$LOG"
 else
@@ -65,3 +72,4 @@ find "$PASTA_BACKUP" -maxdepth 1 -name 'env-*' -mtime "+$DIAS_DE_RETENCAO" -dele
 
 find "$PASTA_BACKUP" -maxdepth 1 -name 'prompts-*.tar.gz' -mtime "+$DIAS_DE_RETENCAO" -delete 2>>"$LOG" || true
 find "$PASTA_BACKUP" -maxdepth 1 -name 'conhecimento-*.tar.gz' -mtime "+$DIAS_DE_RETENCAO" -delete 2>>"$LOG" || true
+find "$PASTA_BACKUP" -maxdepth 1 -name 'agentes-*.tar.gz' -mtime "+$DIAS_DE_RETENCAO" -delete 2>>"$LOG" || true

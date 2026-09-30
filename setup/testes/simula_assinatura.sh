@@ -10,11 +10,11 @@ DIR=$(mktemp -d)
 export HOME=$DIR
 RESPOSTAS="$DIR/respostas.txt"
 # Na ordem das perguntas:
-# - criar agente: assinatura (5), ligar (Sim), segundo modelo (2), reserva OpenAI (1), chave, modelo 1;
-# - editar a resposta de um agente sem reserva (1): assinatura (5), modelo 1, reserva OpenAI (1), modelo 1;
+# - criar agente: assinatura (6, depois dos cinco provedores com chave), ligar (Sim), segundo modelo (2), reserva OpenAI (1), chave, modelo 1;
+# - editar a resposta de um agente sem reserva (1): assinatura (6), modelo 1, reserva OpenAI (1), modelo 1;
 # - desligar (Sim);
-# - criar agente de novo: assinatura (5), recusar ligar (Não), OpenAI (1), modelo 1.
-printf '%s\n' 5 s 2 1 boa 1 1 5 1 1 1 s 5 n 1 1 >"$RESPOSTAS"
+# - criar agente de novo: assinatura (6), recusar ligar (Não), OpenAI (1), modelo 1.
+printf '%s\n' 6 s 2 1 boa 1 1 6 1 1 1 s 6 n 1 1 >"$RESPOSTAS"
 export ASIMOV_TTY=$RESPOSTAS
 # shellcheck source=setup/lib/base.sh
 source "$RAIZ_PROJETO/setup/lib/base.sh"

@@ -11,6 +11,15 @@ Ajude a evoluir o comportamento dos agentes pelos prompts e pelas configuraçõe
 - Leia o prompt atual antes de editar. Preserve regras de negócio que o operador não pediu para mudar.
 - Não invente pastas de código, comandos de publicação ou ferramentas que esta instalação não possui.
 
+<!-- asimov:evolucao -->
+## Evoluir um agente com o pacote de análise
+
+Recebeu documentos da análise de conversas de uma empresa (system prompt, especificação YAML,
+casos de teste, diagnóstico, ZIP)? Siga `modelos/guias/evolucao-de-agente.md` do começo, sem
+esperar o operador explicar. Comandos: `asimov agente ajuda` e `asimov ferramenta ajuda`. Estado de cada agente em
+`agentes/<empresa_id>/<agente_id>/evolucao.md`: comece por ele para retomar.
+<!-- /asimov:evolucao -->
+
 ## O que pode evoluir aqui
 
 - `prompts/<empresa>/<agente>/persona.md`: instruções, personalidade e comportamento do agente.
@@ -21,14 +30,17 @@ Ajude a evoluir o comportamento dos agentes pelos prompts e pelas configuraçõe
   menu `asimov editar` ou no painel. Não escreva diretamente no banco.
 - O formulário de personalidade pode regenerar o prompt; considere isso ao combinar edição
   manual com edição pelo painel. Guarde a versão anterior antes de mudar.
-- Ferramenta nova, integração de código ou mudança da plataforma exige o repositório de
-  desenvolvimento e uma nova imagem. Não edite o interior de contêineres como solução permanente.
+- Troque prompt com `asimov agente prompt aplicar`, que guarda a versão anterior e permite voltar.
+- Mudança da plataforma exige o repositório de desenvolvimento e uma nova imagem. Não edite o
+  interior de contêineres como solução permanente.
 
 ## Comandos existentes
 
 - `asimov ajuda`: comandos disponíveis. `asimov`: menu do operador.
 - `asimov agentes`: lista os agentes. `asimov editar`: configura um agente.
 - `asimov conversar`: conversa de teste. Valide exemplos de atendimento após mudar o prompt.
+- `asimov agente ajuda` e `asimov ferramenta ajuda`: evoluir um agente (pacote, prompt,
+  conversa de teste) e construir as ferramentas próprias dele.
 - `asimov diagnostico`: estado da instalação. `asimov atualizar`: atualiza a plataforma.
 - Para Compose, use `source deploy/compose.sh` e depois `dc <comando>`.
   Não use `docker compose` diretamente: o helper define o projeto e o arquivo de configuração.

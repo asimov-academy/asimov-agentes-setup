@@ -37,7 +37,11 @@ confere
 printf 'Contexto personalizado\n' >"$RAIZ_PROJETO/AGENTS.md"
 printf 'Configuração personalizada\n' >"$RAIZ_PROJETO/CLAUDE.md"
 gera_arquivos_de_contexto
-[ "$(cat "$RAIZ_PROJETO/AGENTS.md")" = 'Contexto personalizado' ]
+# O texto do operador fica; só a seção de evolução entra no fim, uma vez.
+[ "$(head -1 "$RAIZ_PROJETO/AGENTS.md")" = 'Contexto personalizado' ]
+[ "$(grep -c '<!-- asimov:evolucao -->' "$RAIZ_PROJETO/AGENTS.md")" = 1 ]
+gera_arquivos_de_contexto
+[ "$(grep -c '<!-- asimov:evolucao -->' "$RAIZ_PROJETO/AGENTS.md")" = 1 ]
 [ "$(cat "$RAIZ_PROJETO/CLAUDE.md")" = 'Configuração personalizada' ]
 echo 'ok: contexto personalizado preservado'
 # Carrega só a função de atualização, sem executar o entrypoint real nem acessar .env.

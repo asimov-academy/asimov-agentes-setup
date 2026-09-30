@@ -26,6 +26,8 @@ x-backend: &backend
     - ../modelos:/app/modelos:ro
     - midia:/var/lib/asimov/midia
     - conhecimento:/var/lib/asimov/conhecimento
+    # Um socket por empresa para chamar as ferramentas próprias no contêiner dela (fase 12).
+    - /var/lib/asimov/ferramentas-sock:/var/lib/asimov/ferramentas-sock
   depends_on:
     postgres:
       condition: service_healthy
@@ -159,6 +161,25 @@ services:
     volumes:
       - ${CREDENCIAL_IA_HOST:-../modelos}:${CREDENCIAL_IA_CONTAINER:-/tmp/sem-credencial}:rw
 
+  # Saída para a internet das ferramentas próprias dos agentes (fase 12). O contêiner de ferramentas
+  # de cada empresa não tem rede nenhuma: só alcança este proxy pelo socket da pasta dele. Este
+  # serviço fica numa rede própria, fora da rede do Compose (sem rota para banco, Redis, API ou
+  # WAHA), sem .env, e só deixa sair para IP público que não seja a própria VPS. Nada de firewall.
+  saida:
+    image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
+    logging: *log
+    command: ["python", "-m", "app.plataforma.saida"]
+    environment:
+      FERRAMENTAS_SOCK: /var/lib/asimov/ferramentas-sock
+      ASIMOV_IPS_DO_HOST: ${ASIMOV_IPS_DO_HOST:-}
+    volumes:
+      - /var/lib/asimov/ferramentas-sock:/var/lib/asimov/ferramentas-sock
+    networks: [saida]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
   # WhatsApp pela WAHA. Sobe com o resto da plataforma, na instalação: sem isso, ligar o WhatsApp
   # pelo painel esbarrava num contêiner que só o terminal sabia subir. Sem porta publicada: quem
   # fala com ela é a API, pela rede do Compose. O volume guarda o pareamento do número.
@@ -187,6 +208,9 @@ services:
       - waha_sessoes:/app/.sessions
       - waha_arquivos:/app/.media
     restart: unless-stopped
+
+networks:
+  saida: {}
 
 volumes:
   postgres:

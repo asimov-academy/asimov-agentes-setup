@@ -23,6 +23,45 @@ gera_arquivos_de_contexto() {
     fi
   done
   garante_contexto_de_evolucao
+  garante_permissoes_dos_assistentes
+}
+
+# garante_permissoes_dos_assistentes: `asimov agente` e `asimov ferramenta` falam com a API em
+# 127.0.0.1 e com o Docker. O Codex roda cada comando num sandbox sem rede e pedia aprovação a cada
+# um (o aluno via "a API não respondeu"). A regra `allow` roda fora do sandbox sem perguntar; ativar,
+# segredo e executar ficam em `prompt`, e o operador aprova. O arquivo é da plataforma: a
+# atualização o reescreve. No Claude Code o mesmo vai no settings do projeto, somando ao que existe.
+garante_permissoes_dos_assistentes() {
+  local regras="$HOME/.codex/rules" settings="$RAIZ_PROJETO/.claude/settings.json" atual
+  if [ -d "$HOME/.codex" ]; then
+    # O sandbox do Codex usa o bubblewrap do sistema; sem ele, avisa em toda abertura.
+    if ! command -v bwrap >/dev/null 2>&1 && command -v apt_instala >/dev/null 2>&1; then
+      apt_instala bubblewrap >>"$LOG" 2>&1 || true
+    fi
+    mkdir -p "$regras"
+    cat >"$regras/asimov.rules" <<'REGRAS'
+# Gerado pelo instalador do Asimov Agentes: asimov atualizar reescreve este arquivo.
+# Os comandos do Asimov falam com a API local (127.0.0.1) e com o Docker: rodam fora do sandbox.
+prefix_rule(pattern = ["asimov", "agente"], decision = "allow", justification = "fala com a API local do Asimov")
+prefix_rule(pattern = ["asimov", "ferramenta"], decision = "allow", justification = "fala com a API local e com o Docker")
+prefix_rule(pattern = ["asimov", "agentes"], decision = "allow", justification = "lista os agentes pela API local")
+prefix_rule(pattern = ["asimov", "diagnostico"], decision = "allow", justification = "confere a instalação")
+prefix_rule(pattern = ["asimov", "ferramenta", "ativar"], decision = "prompt", justification = "muda o atendimento: o operador aprova")
+prefix_rule(pattern = ["asimov", "ferramenta", "segredo"], decision = "prompt", justification = "credencial: o operador aprova")
+prefix_rule(pattern = ["asimov", "ferramenta", "executar"], decision = "prompt", justification = "chamada de verdade: o operador aprova")
+REGRAS
+  fi
+  mkdir -p "$RAIZ_PROJETO/.claude"
+  atual='{}'
+  if [ -s "$settings" ]; then
+    atual=$(jq -c . "$settings" 2>/dev/null || echo '{}')
+  fi
+  jq '.permissions.allow = ((.permissions.allow // []) + [
+        "Bash(asimov agente:*)", "Bash(asimov ferramenta:*)", "Bash(asimov agentes:*)", "Bash(asimov diagnostico:*)"
+      ] | unique)
+      | .permissions.ask = ((.permissions.ask // []) + [
+        "Bash(asimov ferramenta ativar:*)", "Bash(asimov ferramenta segredo:*)", "Bash(asimov ferramenta executar:*)"
+      ] | unique)' <<<"$atual" >"$settings.tmp" && mv "$settings.tmp" "$settings"
 }
 
 # garante_contexto_de_evolucao: AGENTS.md que já existia (o instalador nunca o sobrescreve) ganha só

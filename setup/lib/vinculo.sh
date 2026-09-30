@@ -75,6 +75,7 @@ vinculo_grava() {
   config=$(ia_arquivo_de_config)
   env_set IA_VINCULADA 1
   env_set IA_CLI "$(env_get AGENTE_CODIGO)"
+  garante_permissoes_dos_assistentes || true
   env_set IA_CONTA "$(vinculo_conta)"
   # O contêiner do copiloto monta esta pasta para usar o mesmo login, sem cópia de credencial.
   env_set CREDENCIAL_IA_HOST "$dir"

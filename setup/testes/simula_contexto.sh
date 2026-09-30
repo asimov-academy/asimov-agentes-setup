@@ -12,6 +12,9 @@ LOG="$TEMP_TESTE/teste.log"
 mkdir -p "$RAIZ_PROJETO/modelos" "$DIR_ESTADO"
 cp -a "$REPO/modelos/." "$RAIZ_PROJETO/modelos/"
 touch "$ARQ_ESTADO" "$LOG"
+# Casa própria: o teste grava as regras do Codex e nunca pode tocar nas de quem roda.
+export HOME="$TEMP_TESTE/casa"
+mkdir -p "$HOME/.codex"
 # shellcheck source=setup/lib/estado.sh
 source "$REPO/setup/lib/estado.sh"
 # shellcheck source=setup/lib/final.sh
@@ -65,3 +68,16 @@ if (tela_final) 2>/dev/null; then exit 1; fi
 if estado_tem instalacao_concluida; then exit 1; fi
 [ -z "$(find "$RAIZ_PROJETO" -name '.contexto.*' -print)" ]
 echo 'ok: falha de geração impede sucesso falso e não deixa arquivo parcial'
+# Codex e Claude Code liberados para os comandos do Asimov, sem apagar o que o operador já tinha.
+cp "$REPO/modelos/AGENTS.md.tmpl" "$RAIZ_PROJETO/modelos/"
+gera_arquivos_de_contexto
+grep -q 'pattern = \["asimov", "agente"\], decision = "allow"' "$HOME/.codex/rules/asimov.rules"
+grep -q '"ativar"\], decision = "prompt"' "$HOME/.codex/rules/asimov.rules"
+printf '{"permissions":{"allow":["Bash(ls:*)"]},"model":"opus"}' >"$RAIZ_PROJETO/.claude/settings.json"
+gera_arquivos_de_contexto
+gera_arquivos_de_contexto
+jq -e '.model == "opus" and (.permissions.allow | index("Bash(ls:*)")) and (.permissions.allow | index("Bash(asimov agente:*)"))
+  and (.permissions.ask | index("Bash(asimov ferramenta ativar:*)"))
+  and ([.permissions.allow[] | select(. == "Bash(asimov agente:*)")] | length == 1)' \
+  "$RAIZ_PROJETO/.claude/settings.json" >/dev/null
+echo 'ok: Codex e Claude Code rodam os comandos do Asimov fora do sandbox; o que o operador tinha fica'

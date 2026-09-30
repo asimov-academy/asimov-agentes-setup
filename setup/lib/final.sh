@@ -51,6 +51,8 @@ prefix_rule(pattern = ["asimov", "ferramenta", "segredo"], decision = "prompt", 
 prefix_rule(pattern = ["asimov", "ferramenta", "executar"], decision = "prompt", justification = "chamada de verdade: o operador aprova")
 REGRAS
   fi
+  # Só numa pasta de projeto instalada (com o contexto dos assistentes), nunca no repositório.
+  [ -f "$RAIZ_PROJETO/AGENTS.md" ] || return 0
   mkdir -p "$RAIZ_PROJETO/.claude"
   atual='{}'
   if [ -s "$settings" ]; then

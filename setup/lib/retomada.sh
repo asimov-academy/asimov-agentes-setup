@@ -64,11 +64,18 @@ confere_api_local() {
   espera_url "$API_LOCAL/health" 24
 }
 
+# confere_https_depois_de_atualizar: o HTTPS só era conferido na primeira instalação, e o endereço
+# público pode ter caído por fora (Caddy da VPS regravado). Três tentativas: aqui é aviso, não trava.
+confere_https_depois_de_atualizar() {
+  CONFERE_HTTPS_TENTATIVAS=3 confere_https "$(env_get SUBDOMINIO_BOT)" >>"$LOG" 2>&1 && return 0
+  aviso "O endereço público não respondeu depois de atualizar. Rode $(destaque "asimov diagnostico")."
+}
+
 confere_https() {
   local sub=$1 codigo=000 resultado=0 corpo
   servico_rodando caddy || { echo "O Caddy do Asimov não está rodando."; return 1; }
   corpo=$(mktemp) || return 1
-  for _ in $(seq 1 24); do
+  for _ in $(seq 1 "${CONFERE_HTTPS_TENTATIVAS:-24}"); do
     resultado=0
     codigo=$(curl -sS -o "$corpo" -w '%{http_code}' --connect-timeout 5 --max-time 10 "https://$sub/health") || resultado=$?
     if [ "$resultado" -eq 0 ] && [ "$codigo" = 200 ] &&
@@ -76,14 +83,15 @@ confere_https() {
       rm -f "$corpo"
       return 0
     fi
-    printf 'HTTPS: tentativa %s/24, curl=%s HTTP=%s\n' "$_" "$resultado" "$codigo"
+    printf 'HTTPS: tentativa %s/%s, curl=%s HTTP=%s\n' "$_" "${CONFERE_HTTPS_TENTATIVAS:-24}" "$resultado" "$codigo"
     sleep 5
   done
   rm -f "$corpo"
   case "$resultado" in
     6) echo "DNS: o domínio não foi resolvido." ;;
     7|28) echo "Conexão: confira encaminhamento no proxy e firewall da VPS/provedor." ;;
-    60) echo "TLS: certificado ausente, inválido ou de outro domínio." ;;
+    35) echo "TLS recusado: o proxy da VPS não tem este domínio. Rode asimov diagnostico." ;;
+    51|60) echo "TLS: certificado ausente, inválido ou de outro domínio." ;;
     *) echo "HTTPS respondeu HTTP $codigo. Confira o proxy e a saúde da API; não é necessariamente erro de certificado." ;;
   esac
   echo "Diagnóstico: cd $RAIZ_PROJETO && source deploy/compose.sh && dc ps"

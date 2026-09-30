@@ -25,7 +25,7 @@ source "$REPO/setup/lib/instalacao.sh"
 source "$REPO/setup/lib/painel.sh"
 ARQ_CADDY_PAINEL="$RAIZ_PROJETO/deploy/caddy/painel.caddy"
 date() { command date '+%Y-%m-%dT%H:%M:%S'; }
-info() { :; }; dica() { :; }; aviso() { :; }; ok() { :; }; secao() { :; }
+info() { :; }; dica() { :; }; aviso() { :; }; ok() { :; }; secao() { :; }; falha() { :; }; destaque() { printf "%s" "$1"; }
 erro_fatal() { echo "$*" >&2; exit 1; }
 linha_ok() { :; }; linha_rodando() { :; }; linha_erro() { :; }
 confirma() { echo "Pergunta técnica inesperada" >&2; exit 99; }
@@ -144,6 +144,44 @@ echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
   cmp "$HOST_CONFIG" "$TEMP_TESTE/integrado"
 )
 echo 'ok: candidato inválido não altera host; reload falho e interrupção recuperáveis'
+
+# Integração perdida (outra ferramenta regravou o Caddyfile) é vista e refeita; domínio colado à
+# mão não trava a atualização. O diagnóstico do dia 29/09 mostrava só `000`.
+(
+  HOST_CONFIG="$TEMP_TESTE/perdido/Caddyfile"
+  mkdir -p "$(dirname "$HOST_CONFIG")"
+  printf 'outro.exemplo.com.br { respond "preservado" }\n' >"$HOST_CONFIG"
+  caddy() { return 0; }
+  systemctl() {
+    case "$1" in
+      is-active) return 0 ;;
+      show) echo "{ argv[]=caddy run --config $HOST_CONFIG --adapter caddyfile ; }" ;;
+      reload) return 0 ;;
+    esac
+  }
+  confirma() { return 0; }
+  env_set ASIMOV_PROXY externo
+  gera_proxy_externo
+  integra_caddy_host "$HOST_CONFIG"
+  [ "$(situacao_caddy_host)" = integrado ]
+  # Outra ferramenta regrava o arquivo só com os sites dela.
+  printf 'outro.exemplo.com.br { respond "preservado" }\n' >"$HOST_CONFIG"
+  [ "$(situacao_caddy_host)" = perdido ]
+  repara_caddy_host >/dev/null
+  [ "$(situacao_caddy_host)" = integrado ]
+  grep -q 'preservado' "$HOST_CONFIG"
+  # Colado à mão: fica como está, e integrar de novo não duplica o domínio nem falha.
+  printf 'outro.exemplo.com.br { respond "preservado" }\nbot.exemplo.com.br {\n reverse_proxy 127.0.0.1:18081\n}\n' >"$HOST_CONFIG"
+  cp "$HOST_CONFIG" "$TEMP_TESTE/perdido/manual"
+  [ "$(situacao_caddy_host)" = manual ]
+  integra_caddy_ou_explica >/dev/null
+  cmp "$HOST_CONFIG" "$TEMP_TESTE/perdido/manual"
+  # Sem integração do Asimov (outro proxy), nada é oferecido.
+  estado_remove proxy_host_integrado
+  [ "$(situacao_caddy_host)" = sem_integracao ]
+  repara_caddy_host
+)
+echo 'ok: integração perdida é vista e refeita; domínio colado à mão não trava'
 
 # Caddy padrão é integrado sem pergunta; proxy desconhecido preserva o host e para.
 (

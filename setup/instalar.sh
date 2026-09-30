@@ -13,6 +13,7 @@ atualiza() {
   banner_asimov
   tela_modo
   atualiza_plataforma
+  confere_https_depois_de_atualizar
   ajusta_permissoes
   instala_comando
   gera_arquivos_de_contexto || erro_fatal "Não foi possível preparar o contexto dos assistentes" "Confira $LOG e rode novamente."

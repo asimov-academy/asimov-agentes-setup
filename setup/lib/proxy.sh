@@ -69,6 +69,36 @@ gera_proxy_externo() {
   } >"$RAIZ_PROJETO/deploy/proxy-externo.caddy"
 }
 
+# dominio_no_caddyfile ARQUIVO DOMINIO: o domínio é endereço de site no próprio arquivo, colado à
+# mão, e não no bloco que o Asimov importa.
+dominio_no_caddyfile() {
+  local arquivo=$1 dominio=${2//./\\.}
+  $SUDO grep -Eq "(^|[[:space:],])(https?://)?${dominio}(:[0-9]+)?[[:space:]]*([,{]|$)" "$arquivo" 2>/dev/null
+}
+
+# situacao_caddy_host: proprio (o Caddy do Asimov tem as portas 80 e 443), sem_integracao (outro
+# proxy, ajustado fora daqui), integrado, manual (o domínio colado à mão no Caddyfile) ou perdido:
+# a linha `import` ou o bloco do Asimov sumiram. Perdido deixa o domínio sem HTTPS, e o Chatwoot e o
+# WhatsApp oficial param de alcançar os agentes sem nenhum aviso do lado de cá.
+situacao_caddy_host() {
+  local config snippet sub
+  [ "$(env_get ASIMOV_PROXY)" = externo ] || { echo proprio; return 0; }
+  estado_tem proxy_host_integrado || { echo sem_integracao; return 0; }
+  config=$(estado_get proxy_host_caddyfile || true)
+  config=${config:-/etc/caddy/Caddyfile}
+  snippet="$(dirname "$config")/asimov.caddy"
+  sub=$(env_get SUBDOMINIO_BOT)
+  if $SUDO grep -qxF "import $snippet" "$config" 2>/dev/null &&
+      $SUDO grep -q '^# Gerado pelo Asimov\.' "$snippet" 2>/dev/null &&
+      $SUDO grep -qF "$sub {" "$snippet" 2>/dev/null; then
+    echo integrado
+  elif dominio_no_caddyfile "$config" "$sub"; then
+    echo manual
+  else
+    echo perdido
+  fi
+}
+
 # Recupera só a transação do Asimov. Nenhuma configuração alheia é apagada.
 restaura_proxy() {
   local backup config_caddy destino
@@ -106,7 +136,10 @@ restaura_proxy() {
 
 # Candidato validado antes de substituir; transação persistida sobrevive até a SIGKILL/reboot.
 integra_caddy_host() (
-  local config_caddy=${1:-/etc/caddy/Caddyfile} destino backup comando candidato snippet
+  # Sem argumento, o Caddyfile da última integração; na primeira, o padrão do pacote.
+  local config_caddy=${1:-} destino backup comando candidato snippet
+  [ -n "$config_caddy" ] || config_caddy=$(estado_get proxy_host_caddyfile || true)
+  config_caddy=${config_caddy:-/etc/caddy/Caddyfile}
   destino="$(dirname "$config_caddy")/asimov.caddy"
   command -v caddy >/dev/null || return 1
   $SUDO systemctl is-active --quiet caddy || return 1
@@ -114,6 +147,13 @@ integra_caddy_host() (
   [[ "$comando" == *"--config $config_caddy "* || "$comando" == *"--config=$config_caddy "* ]] || return 1
   [ -f "$config_caddy" ] && [ ! -L "$config_caddy" ] && [ ! -L "$destino" ] || return 1
   restaura_proxy || return 1
+  # Domínio colado à mão no Caddyfile: importar o bloco do Asimov o definiria duas vezes, e o Caddy
+  # recusaria o arquivo inteiro, travando a atualização. O que já funciona fica como está (código 3).
+  if dominio_no_caddyfile "$config_caddy" "$(env_get SUBDOMINIO_BOT)"; then
+    estado_set proxy_host_caddyfile "$config_caddy"
+    estado_set proxy_host_integrado 1
+    return 3
+  fi
   backup=$(mktemp -d "$DIR_ESTADO/caddy-antes.XXXXXX") || return 1
   printf '%s\n' "$config_caddy" >"$backup/alvo"
   $SUDO cp -p "$config_caddy" "$backup/Caddyfile" || return 1
@@ -146,19 +186,49 @@ integra_caddy_host() (
   $SUDO mv -f "$snippet" "$destino" && $SUDO mv -f "$candidato" "$config_caddy" || return 1
   $SUDO systemctl reload caddy >>"$LOG" 2>&1 || return 1
   estado_remove proxy_transacao
+  estado_set proxy_host_caddyfile "$config_caddy"
   estado_set proxy_host_integrado 1
 )
+
+# integra_caddy_ou_explica: 0 com a integração feita ou com o domínio já colado à mão, que fica como
+# está; qualquer outro código é falha, com a configuração anterior preservada.
+integra_caddy_ou_explica() {
+  local codigo=0
+  integra_caddy_host || codigo=$?
+  if [ "$codigo" = 3 ]; then
+    aviso "O Caddy da VPS já tem $(env_get SUBDOMINIO_BOT) colado à mão, fora do Asimov: deixei como está."
+    dica "Se ele parar de responder, apague esse bloco do Caddyfile e rode asimov diagnostico."
+    return 0
+  fi
+  return "$codigo"
+}
+
+# repara_caddy_host: a integração sumiu (outra ferramenta regravou o Caddyfile, backup restaurado,
+# edição à mão). Refaz pela mesma transação da instalação, que valida antes de trocar e preserva os
+# outros sites. Não mexe em nada sem o operador confirmar.
+repara_caddy_host() {
+  [ "$(situacao_caddy_host)" = perdido ] || return 0
+  falha "O Caddy da VPS perdeu o endereço $(destaque "$(env_get SUBDOMINIO_BOT)")."
+  dica "Sem ele, o Chatwoot e o WhatsApp oficial não alcançam os agentes. O teste no terminal continua funcionando."
+  confirma "Refazer a integração agora? Os outros sites da VPS ficam como estão." || return 0
+  if gera_proxy_externo && integra_caddy_ou_explica; then
+    ok "Integração refeita."
+  else
+    falha "Não consegui refazer: a configuração anterior foi preservada. Veja $LOG."
+    return 1
+  fi
+}
 
 configura_proxy_externo() {
   [ "$(env_get ASIMOV_PROXY)" = externo ] || return 0
   gera_proxy_externo || return 1
   if estado_tem proxy_host_integrado; then
-    integra_caddy_host || erro_fatal "Não consegui atualizar o proxy existente" "A configuração anterior foi preservada. Veja $LOG."
+    integra_caddy_ou_explica || erro_fatal "Não consegui atualizar o proxy existente" "A configuração anterior foi preservada. Veja $LOG."
     return 0
   fi
   if command -v caddy >/dev/null && $SUDO systemctl is-active --quiet caddy; then
     info "Preparando o acesso seguro, preservando os sites existentes..."
-    integra_caddy_host || erro_fatal "Não foi possível preparar o acesso automaticamente" \
+    integra_caddy_ou_explica || erro_fatal "Não foi possível preparar o acesso automaticamente" \
       "A instalação está salva. Peça ao suporte para conferir $LOG e rode novamente."
     return 0
   fi

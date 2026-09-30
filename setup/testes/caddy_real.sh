@@ -11,15 +11,23 @@ limpa() {
   rm -rf "$TEMP_CADDY"
 }
 trap limpa EXIT
-mkdir -p "$TEMP_CADDY/extras" "$TEMP_CADDY/backend/admin"
-echo saudavel >"$TEMP_CADDY/backend/health"
-echo privado >"$TEMP_CADDY/backend/admin/index.html"
+mkdir -p "$TEMP_CADDY/extras"
 cp "$REPO/deploy/Caddyfile" "$TEMP_CADDY/Caddyfile"
 echo '# Sem painel neste teste' >"$TEMP_CADDY/extras/painel.caddy"
-python3 -m http.server 8000 --bind 127.0.0.1 --directory "$TEMP_CADDY/backend" >"$TEMP_CADDY/http.log" 2>&1 &
+# Backend fictício: /health responde, /webhook/xff devolve o X-Forwarded-For que chegou.
+python3 -c '
+import http.server
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        corpo = {"/health": "saudavel", "/webhook/xff": self.headers.get("X-Forwarded-For", "")}.get(self.path, "privado")
+        self.send_response(200); self.end_headers(); self.wfile.write(corpo.encode())
+http.server.HTTPServer(("127.0.0.1", 8000), H).serve_forever()
+' >"$TEMP_CADDY/http.log" 2>&1 &
 PID_HTTP=$!
+# Modo externo: o proxy do host fala com o Caddy pelo loopback, e o XFF dele precisa chegar à API.
 docker run -d --name "$NOME_CADDY" --network host --add-host api:127.0.0.1 \
   -e SUBDOMINIO_BOT=bot.exemplo.test:18880 -e ASIMOV_ESQUEMA=http -e EMAIL_SSL=teste@exemplo.com.br \
+  -e ASIMOV_PROXIES_CONFIAVEIS=private_ranges \
   -v "$TEMP_CADDY/Caddyfile:/etc/caddy/Caddyfile:ro" \
   -v "$TEMP_CADDY/extras:/etc/caddy/extras:ro" caddy:2-alpine >/dev/null
 for _ in $(seq 1 30); do
@@ -32,3 +40,6 @@ for caminho in /admin /admin/ /admin/clientes /painel/api /openapi.json; do
   [ "$codigo" = 404 ] || { echo "Caminho privado exposto: $caminho ($codigo)"; exit 1; }
 done
 echo 'ok: gateway real responde health e bloqueia caminhos privados'
+xff=$(curl -fsS -H 'Host: bot.exemplo.test:18880' -H 'X-Forwarded-For: 203.0.113.7' http://127.0.0.1:18880/webhook/xff)
+case "$xff" in 203.0.113.7,*) ;; *) echo "IP do visitante perdido atrás do proxy do host: $xff"; exit 1 ;; esac
+echo 'ok: atrás do proxy do host, o IP do visitante chega à API'

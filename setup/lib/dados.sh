@@ -48,7 +48,8 @@ pede_chave() {
   while true; do
     pergunta_secreta chave "Chave de API da $(nome_bonito "$provedor")"
     printf '  %sTestando…%s' "$CINZA" "$NORMAL"
-    api PUT "/admin/ia/chaves/$provedor" "$(jq -n --arg c "$chave" '{chave: $c}')"
+    # Pelo ambiente: `jq --arg` deixaria a chave em `ps` para qualquer usuário da VPS (A13).
+    api PUT "/admin/ia/chaves/$provedor" "$(ASIMOV_CHAVE="$chave" jq -n '{chave: env.ASIMOV_CHAVE}')"
     printf '\r\033[K'
     if [ "$API_STATUS" = 204 ]; then
       ok "Chave da $(nome_bonito "$provedor") válida"

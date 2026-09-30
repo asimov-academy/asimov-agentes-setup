@@ -22,6 +22,19 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${ASIMOV_TTY:-}" ] && [ -z "${TMUX:-}" ] && [ -
     fi
   fi
   command -v tmux >/dev/null || { echo "Instale tmux e rode novamente para ter uma sessão recuperável."; exit 1; }
+  # Sessão que só espera o Enter do fim (segura_tela) já terminou: reanexar a ela mostrava a tela
+  # velha e o Enter fechava sem atualizar nada. Essa é fechada, e o comando segue do zero.
+  esperando="$ASIMOV_ESTADO_DIR/sessao-esperando-enter"
+  if [ -f "$esperando" ] && tmux has-session -t asimov-instalacao 2>/dev/null; then
+    pid_antigo=$(cat "$esperando" 2>/dev/null || true)
+    tmux kill-session -t asimov-instalacao 2>/dev/null || true
+    # O processo antigo segura a trava da instalação até morrer.
+    for _ in $(seq 1 50); do
+      if [ -z "$pid_antigo" ] || ! kill -0 "$pid_antigo" 2>/dev/null; then break; fi
+      sleep 0.1
+    done
+  fi
+  rm -f "$esperando"
   if tmux has-session -t asimov-instalacao 2>/dev/null; then exec tmux attach -t asimov-instalacao; fi
   mkdir -p "$ASIMOV_ESTADO_DIR"; chmod 700 "$ASIMOV_ESTADO_DIR"
   sessao_script="$ASIMOV_ESTADO_DIR/instalador-sessao.sh"
@@ -31,21 +44,37 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${ASIMOV_TTY:-}" ] && [ -z "${TMUX:-}" ] && [ -
     (umask 077; curl -fsSL https://raw.githubusercontent.com/asimov-academy/asimov-agentes-setup/main/install.sh -o "$sessao_script")
   fi
   printf -v sessao_comando 'env ASIMOV_SESSAO=1 ASIMOV_ESTADO_DIR=%q ASIMOV_ATUALIZAR=%q ASIMOV_DIR=%q ASIMOV_VERSAO=%q ASIMOV_PACOTE=%q ASIMOV_SHA256=%q bash %q' \
-    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.35.3}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
+    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.36.0}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
   echo "Se a conexão cair, rode o mesmo comando ou: tmux attach -t asimov-instalacao"
   exec tmux new-session -A -s asimov-instalacao "$sessao_comando"
 fi
 # Dentro da sessão do tmux, sair com erro fechava a tela junto e a mensagem sumia: o operador só via
 # `[exited]` (aconteceu com a tag do instalador ainda por sair e com duas instalações ao mesmo tempo).
 temp=""
+termina_no_menu=""
 segura_tela() {
   local codigo=$?
   [ -n "$temp" ] && rm -rf "$temp"
-  if [ "$codigo" != 0 ] && [ -n "${ASIMOV_SESSAO:-}" ]; then
+  [ -n "${ASIMOV_SESSAO:-}" ] || return 0
+  if [ "$codigo" != 0 ]; then
     echo
     echo "A instalação parou. O motivo está na mensagem acima."
-    read -r -p "Enter para fechar esta tela. " _ </dev/tty 2>/dev/null || sleep 60
+  elif [ -n "$termina_no_menu" ]; then
+    return 0
   fi
+  # Instalação nova e atualização terminam no resumo, sem menu: sem a pausa, dava certo e a tela
+  # fechava do mesmo jeito, com o mesmo `[exited]` de quando dava errado, levando junto o endereço
+  # e o código de primeiro acesso do painel. Só quem saiu do menu com "Sair" fecha direto.
+  # A marca diz ao próximo install.sh que esta sessão só espera o Enter e pode ser fechada. Fechada
+  # por ele, o HUP sai direto: sem o trap, o `read` falhava no terminal morto e o `sleep 60`
+  # seguia segurando a trava.
+  trap - EXIT
+  trap 'rm -f "$ASIMOV_ESTADO_DIR/sessao-esperando-enter"; exit "$codigo"' HUP TERM
+  echo "$$" >"$ASIMOV_ESTADO_DIR/sessao-esperando-enter" 2>/dev/null || true
+  # A pergunta fora do `read -p`: ele a escreve no stderr, e o `2>/dev/null` a escondia.
+  printf 'Enter para fechar esta tela. '
+  read -r _ </dev/tty 2>/dev/null || sleep 60
+  rm -f "$ASIMOV_ESTADO_DIR/sessao-esperando-enter"
 }
 trap segura_tela EXIT
 
@@ -54,7 +83,7 @@ exec 9>"$ASIMOV_ESTADO_DIR/instalacao.lock"
 flock -n 9 || { echo "Outra instalação está em andamento. Use: tmux attach -t asimov-instalacao"; exit 1; }
 export ASIMOV_LOCK=1
 
-VERSAO="${ASIMOV_VERSAO:-v0.35.3}"
+VERSAO="${ASIMOV_VERSAO:-v0.36.0}"
 PACOTE="${ASIMOV_PACOTE:-https://codeload.github.com/asimov-academy/asimov-agentes-setup/tar.gz/$VERSAO}"
 SHA256="${ASIMOV_SHA256:-}"
 DESTINO="${ASIMOV_DIR:-$HOME/asimov-agentes}"
@@ -63,7 +92,9 @@ unset ASIMOV_VERSAO
 
 if [ -f "$DESTINO/setup/instalar.sh" ] && [ -z "${ASIMOV_ATUALIZAR:-}" ] &&
     grep -q '^instalacao_concluida=' "$ASIMOV_ESTADO_DIR/estado" 2>/dev/null; then
-  exec bash "$DESTINO/setup/instalar.sh"
+  termina_no_menu=1
+  bash "$DESTINO/setup/instalar.sh"
+  exit 0
 fi
 
 command -v curl >/dev/null 2>&1 || { echo "Instale o curl: apt-get install -y curl"; exit 1; }
@@ -101,4 +132,6 @@ if [ -f "$DESTINO/setup/instalar.sh" ]; then
 fi
 mkdir -p "$DESTINO"
 tar -xzf "$temp/pacote.tar.gz" -C "$DESTINO" --strip-components=1 --no-same-owner
-exec bash "$DESTINO/setup/instalar.sh"
+# Sem `exec`: ele trocava este processo pelo setup, e a `segura_tela` ia junto. Todo erro do setup
+# dentro do tmux (inclusive "não subiu saudável") fechava a tela antes de alguém ler.
+bash "$DESTINO/setup/instalar.sh"

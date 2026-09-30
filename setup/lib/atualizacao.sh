@@ -53,12 +53,21 @@ volta_versao() {
   fi
   env_set ASIMOV_VERSAO "$anterior"
   estado_set versao "${anterior#v}"
-  # Pasta apagada e copiada, nunca escrita por cima: o bash ainda está lendo os arquivos atuais.
+  # setup/ é apagada e copiada, nunca escrita por cima: o bash ainda está lendo os arquivos atuais.
+  # deploy/ e modelos/ não: api, worker e caddy montam essas pastas, e a montagem fica presa ao
+  # diretório de quando o contêiner subiu. Apagada, ela ficava vazia lá dentro (sem /privacidade,
+  # sem o bloco do painel), e nada recriava os contêineres. Nelas saem só os arquivos, e as
+  # subpastas (deploy/caddy) ficam.
   if [ -d "${ASIMOV_GUARDADO:-}" ]; then
     for pasta in setup deploy modelos; do
       [ -d "$ASIMOV_GUARDADO/$pasta" ] || continue
-      rm -rf "${RAIZ_PROJETO:?}/$pasta"
-      cp -a "$ASIMOV_GUARDADO/$pasta" "$RAIZ_PROJETO/$pasta"
+      if [ "$pasta" = setup ] || [ ! -d "$RAIZ_PROJETO/$pasta" ]; then
+        rm -rf "${RAIZ_PROJETO:?}/$pasta"
+        cp -a "$ASIMOV_GUARDADO/$pasta" "$RAIZ_PROJETO/$pasta"
+      else
+        find "${RAIZ_PROJETO:?}/$pasta" -mindepth 1 ! -type d -delete
+        cp -a "$ASIMOV_GUARDADO/$pasta/." "$RAIZ_PROJETO/$pasta/"
+      fi
     done
   fi
   sobe_servicos >>"$LOG" 2>&1 || true

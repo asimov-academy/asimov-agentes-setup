@@ -110,10 +110,11 @@ pede_credenciais_whatsapp() {
 }
 
 # descobre_whatsapp "aguarde": chama o descobrir com o que já está em WHATSAPP_CONEXAO.
-# Devolve 1 quando a API recusou; o corpo fica em WHATSAPP_ACHADO.
+# Devolve 1 quando a API recusou; o corpo fica em WHATSAPP_ACHADO. A conexão (token e chave secreta)
+# vai ao jq pelo ambiente, como em pede_credenciais_whatsapp, nunca por argumento.
 descobre_whatsapp() {
   api_com_token POST /admin/canais/whatsapp/descobrir \
-    "$(jq -n --argjson c "$WHATSAPP_CONEXAO" '{conexao: $c}')" "$1"
+    "$(ASIMOV_CONEXAO="$WHATSAPP_CONEXAO" jq -n '{conexao: (env.ASIMOV_CONEXAO | fromjson)}')" "$1"
   [ "$API_STATUS" = 200 ] || return 1
   WHATSAPP_ACHADO=$API_RESPOSTA
   return 0
@@ -255,11 +256,12 @@ fluxo_agente_whatsapp() {
   escolhe_destino_whatsapp "$(jq -c '.templates_todos' <<<"$WHATSAPP_ACHADO")" || return 0
 
   while true; do
-    corpo=$(jq -n --arg nome "$nome" --argjson conexao "$WHATSAPP_CONEXAO" --argjson f "$ferramentas" \
+    corpo=$(ASIMOV_CONEXAO="$WHATSAPP_CONEXAO" jq -n --arg nome "$nome" --argjson f "$ferramentas" \
       --argjson destino "$HANDOFF_DESTINO" --argjson horas "$RETOMADA_HORAS" \
       --argjson permitidos "$CONTATOS_PERMITIDOS" --arg emojis "$EMOJIS" \
-      '{nome: $nome, canal: "whatsapp", conexao: $conexao, ferramentas: $f, handoff_destino: $destino,
-        retomada_automatica_horas: $horas, contatos_permitidos: $permitidos, emojis: $emojis}')
+      '{nome: $nome, canal: "whatsapp", conexao: (env.ASIMOV_CONEXAO | fromjson), ferramentas: $f,
+        handoff_destino: $destino, retomada_automatica_horas: $horas, contatos_permitidos: $permitidos,
+        emojis: $emojis}')
     api_com_token POST "/admin/clientes/$EMPRESA_ID/agentes" "$(com_modelos "$corpo")" "Apontando o webhook na Meta…"
     if [ "$API_STATUS" = 201 ]; then break; fi
     falha "$(detalhe_erro "$API_RESPOSTA")"
@@ -295,9 +297,10 @@ conecta_whatsapp() {
   escolhe_destino_whatsapp "$(jq -c '.templates_todos' <<<"$WHATSAPP_ACHADO")" || return 0
   ritmo_do_whatsapp && rapido=1
 
-  corpo=$(jq -n --argjson conexao "$WHATSAPP_CONEXAO" --argjson destino "$HANDOFF_DESTINO" \
+  corpo=$(ASIMOV_CONEXAO="$WHATSAPP_CONEXAO" jq -n --argjson destino "$HANDOFF_DESTINO" \
     --argjson horas "$RETOMADA_HORAS" \
-    '{canal: "whatsapp", conexao: $conexao, handoff_destino: $destino, retomada_automatica_horas: $horas}')
+    '{canal: "whatsapp", conexao: (env.ASIMOV_CONEXAO | fromjson), handoff_destino: $destino,
+      retomada_automatica_horas: $horas}')
   api_com_token POST "$(caminho_do_agente "$AGENTE")/canal" "$corpo" "Apontando o webhook na Meta…"
   if [ "$API_STATUS" != 200 ]; then
     RESULTADO=$(falha "$(detalhe_erro "$API_RESPOSTA")")

@@ -50,8 +50,7 @@ CADDY
 painel_recarrega_caddy() {
   configura_proxy_externo || return 1
   dc up -d caddy >>"$LOG" 2>&1 || return 1
-  dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1 ||
-    return 1
+  caddy_carrega
 }
 
 # Quem monta as telas do painel é o serviço `painel`, num contêiner à parte com a imagem privada.
@@ -187,6 +186,11 @@ painel_liga() {
   printf '  %sBaixando e subindo o painel…%s' "$CINZA" "$NORMAL"
   if ! painel_sobe; then
     printf '\r\033[K'
+    # Desfeito na ordem de painel_desliga: ligado no .env sem contêiner, o menu gerava código para
+    # um painel que não existe e toda atualização tentava subir a imagem privada de novo.
+    painel_derruba
+    env_set PAINEL_ATIVO ""
+    painel_escreve_caddy ""
     falha "O painel não subiu. Veja o log: $LOG"
     return 1
   fi
@@ -280,7 +284,7 @@ tela_painel_oferta() {
   # Padrão Não: quem chega pelo workshop gratuito não tem token, e Enter segue sem painel.
   if confirma "Ligar o painel agora?" false; then
     # Falha aqui (API ou contêiner) não pode derrubar a instalação: avisa e segue para o fim.
-    painel_liga || aviso "O painel não terminou de ligar. Rode $(destaque "asimov painel") para conferir e gerar o código."
+    painel_liga || aviso "O painel não terminou de ligar. Rode $(destaque "asimov painel") para ligar de novo ou gerar o código."
     # A próxima tela limpa o terminal: sem esta pausa o código de primeiro acesso sumia antes de
     # ser lido. Ele também volta no resumo final enquanto a conta não existir.
     pausa "Anote o código e aperte Enter para continuar"

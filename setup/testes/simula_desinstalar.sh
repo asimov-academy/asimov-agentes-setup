@@ -55,7 +55,7 @@ prepara_vps() {
   printf 'CHAVE_CRIPTOGRAFIA=teste\n' >"$ARQ_ENV"
   printf 'Você é Ana.\n' >"$RAIZ_PROJETO/prompts/loja-exemplo/ana/persona.md"
   printf '#!/usr/bin/env bash\ntouch "%s/backups/asimov-novo.sql.gz"\n' "$PASTA_DO_SISTEMA" >"$RAIZ_PROJETO/deploy/backup.sh"
-  chmod +x "$RAIZ_PROJETO/deploy/backup.sh"
+  # Sem chmod +x: o tarball do codeload traz o modo do repositório, e o setup não pode depender dele.
   touch "$PASTA_DO_SISTEMA/backups/asimov-antigo.sql.gz" "$HOME/.claude/.credentials.json"
   printf '%s\n' "$CADDYFILE" >"$DIR_ESTADO/caddy-antes.teste/alvo"
   printf 'outro.exemplo.com.br {\n respond "outro site"\n}\n\nimport %s\n' "$TEMP_TESTE/caddy/asimov.caddy" >"$CADDYFILE"
@@ -153,5 +153,13 @@ responde s desinstalar n
 fluxo_desinstalar >/dev/null
 [ -f "$ARQ_ENV" ] && [ -f "$DIR_SYSTEMD/asimov-backup.timer" ]
 echo 'ok: backup que falha não deixa desinstalar sem perguntar'
+
+# Script de deploy/ que o systemd ou o setup chamam vai versionado executável.
+if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
+  if git -C "$REPO" ls-files -s 'deploy/*.sh' | grep -v '^100755'; then
+    echo 'FALHOU: script de deploy/ versionado sem bit de execução'; exit 1
+  fi
+  echo 'ok: scripts de deploy/ versionados executáveis'
+fi
 
 echo 'Desinstalação: todos os cenários passaram.'

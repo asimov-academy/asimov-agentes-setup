@@ -427,7 +427,7 @@ edita_jeito() {
 # O material que o agente sabe além do prompt. O painel tem a mesma coisa na aba Treinamento, pelas
 # mesmas rotas: aqui o arquivo já está na VPS, e lá ele sobe pelo navegador.
 edita_conhecimento() {
-  local op caminho arquivo texto url documento_id documentos linhas
+  local op caminho arquivo texto url documentos linhas
   while true; do
     caminho="$(caminho_do_agente "$AGENTE")/documentos"
     api GET "$caminho"
@@ -464,8 +464,8 @@ edita_conhecimento() {
         api POST "$caminho/site" "$(jq -n --arg u "$url" '{url: $u}')"
         ;;
       4)
-        documento_id=$(escolhe_documento "$documentos") || continue
-        api DELETE "$caminho/$documento_id"
+        escolhe_documento "$documentos" || continue
+        api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
       *) return 0 ;;
     esac
@@ -478,7 +478,9 @@ edita_conhecimento() {
   done
 }
 
-# escolhe_documento JSON: imprime o id escolhido, ou sai diferente de 0 quando não há o que remover.
+# escolhe_documento JSON: grava o id escolhido em DOCUMENTO_ID, ou sai diferente de 0 quando não
+# há o que remover. Por variável, como escolhe_agente: dentro de $(...) a saída não é terminal, e a
+# lista ia para dentro do id em vez da tela.
 escolhe_documento() {
   local op quantos
   local -a nomes=()
@@ -487,7 +489,7 @@ escolhe_documento() {
   while IFS= read -r linha; do nomes+=("$linha"); done < <(jq -r '.[] | .nome' <<<"$1")
   ESC_ESCOLHE=$((quantos + 1)) escolha op "Remover qual?" "${nomes[@]}" "Voltar"
   [ "$op" -le "$quantos" ] || return 1
-  jq -r --argjson i "$((op - 1))" '.[$i].id' <<<"$1"
+  DOCUMENTO_ID=$(jq -r --argjson i "$((op - 1))" '.[$i].id' <<<"$1")
 }
 
 # As mesmas cinco perguntas de sempre, com o prompt que está valendo. O painel tem o mesmo botão na

@@ -100,8 +100,10 @@ falha_ao_desinstalar() {
     "Rode asimov desinstalar de novo: o que já saiu fica de fora, e o resto continua."
 }
 
+# Pelo bash, não pelo bit de execução: o pacote do codeload traz o modo do repositório, e um
+# backup.sh versionado sem `x` nunca rodava.
 desinstala_backup() {
-  $SUDO env HOME="$HOME" "$RAIZ_PROJETO/deploy/backup.sh"
+  $SUDO env HOME="$HOME" bash "$RAIZ_PROJETO/deploy/backup.sh"
 }
 
 desinstala_timers() {

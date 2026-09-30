@@ -1,5 +1,10 @@
 {
 	email {$EMAIL_SSL}
+	# De quem o Caddy aceita o X-Forwarded-For. O setup grava private_ranges só quando o proxy do
+	# host fica na frente (portas em 127.0.0.1); no modo próprio vale só o loopback.
+	servers {
+		trusted_proxies static {$ASIMOV_PROXIES_CONFIAVEIS:127.0.0.1/32}
+	}
 }
 
 {$ASIMOV_ESQUEMA:https}://{$SUBDOMINIO_BOT} {
@@ -16,6 +21,6 @@
 
 # Painel do operador, quando ele escolhe administrar pelo navegador. O arquivo existe sempre (um
 # glob que não casa nada é erro no Caddy) e só tem um comentário enquanto o painel está desligado.
-# Quem escreve é setup/lib/painel.sh, e depois roda `caddy reload`: mudar um arquivo montado não
-# muda o que o Caddy já carregou.
+# Quem escreve é setup/lib/painel.sh, e depois recarrega o Caddy (caddy_carrega): mudar um arquivo
+# montado não muda o que o Caddy já carregou.
 import /etc/caddy/extras/*.caddy

@@ -32,9 +32,32 @@ confirma() { echo "Pergunta técnica inesperada" >&2; exit 99; }
 # Retorno de subida não pode ser mascarado pelo reload.
 dc() { [ "$1" != up ]; }
 if sobe_servicos; then echo 'FALHOU: up recusado virou sucesso'; exit 1; fi
-dc() { [ "$1" != exec ]; }
+printf 'bot.exemplo {\n}\n' >"$RAIZ_PROJETO/deploy/Caddyfile"
+printf '# painel\n' >"$RAIZ_PROJETO/deploy/caddy/painel.caddy"
+# O contêiner enxerga o que está no disco: vale o reload, e o reload recusado propaga.
+dc() {
+  case "$*" in
+    *"caddy reload"*) echo reload >>"$TEMP_TESTE/caddy"; return 1 ;;
+    *restart*) echo restart >>"$TEMP_TESTE/caddy" ;;
+    "exec -T caddy cat /etc/caddy/Caddyfile") cat "$RAIZ_PROJETO/deploy/Caddyfile" ;;
+    "exec -T caddy cat /etc/caddy/extras/"*) cat "$RAIZ_PROJETO/deploy/caddy/$(basename "$5")" ;;
+  esac
+}
 if sobe_servicos; then echo 'FALHOU: reload recusado virou sucesso'; exit 1; fi
-echo 'ok: erros de subida e reload propagados'
+[ "$(cat "$TEMP_TESTE/caddy")" = reload ] || { echo 'FALHOU: reiniciou com o arquivo em dia'; exit 1; }
+# O contêiner preso ao inode antigo do Caddyfile: reinicia, e o restart recusado propaga.
+rm -f "$TEMP_TESTE/caddy"
+dc() {
+  case "$*" in
+    *restart*) echo restart >>"$TEMP_TESTE/caddy"; return 1 ;;
+    *"caddy reload"*) echo reload >>"$TEMP_TESTE/caddy" ;;
+    "exec -T caddy cat /etc/caddy/Caddyfile") echo "Caddyfile antigo" ;;
+  esac
+}
+if sobe_servicos; then echo 'FALHOU: restart recusado virou sucesso'; exit 1; fi
+[ "$(cat "$TEMP_TESTE/caddy")" = restart ] || { echo 'FALHOU: recarregou o Caddyfile antigo'; exit 1; }
+rm -f "$TEMP_TESTE/caddy" "$RAIZ_PROJETO/deploy/Caddyfile"
+echo 'ok: erros de subida, reload e restart propagados; Caddyfile antigo reinicia o Caddy'
 
 # Checkpoint válido não repete; inválido reconcilia, depois grava novamente.
 (
@@ -67,6 +90,9 @@ echo 'ok: volumes sem chaves impedem regeneração'
   [ "$(env_get ASIMOV_PROXY)" = externo ]
   [ "$(env_get ASIMOV_HTTP_BIND)" = 127.0.0.1:18081 ]
   [ "$API_LOCAL" = http://127.0.0.1:8001 ]
+  # Atrás do proxy do host, todo pedido chega pelo gateway da rede do Docker: sem confiar nele, todo
+  # visitante tinha o mesmo IP, e cinco senhas erradas de qualquer um trancavam o painel.
+  [ "$(env_get ASIMOV_PROXIES_CONFIAVEIS)" = private_ranges ]
 )
 echo 'ok: portas de terceiros preservadas e API alternativa'
 (
@@ -76,6 +102,7 @@ echo 'ok: portas de terceiros preservadas e API alternativa'
   escolha() { exit 1; }
   prepara_rede
   [ "$(env_get ASIMOV_PROXY)" = proprio ]
+  [ "$(env_get ASIMOV_PROXIES_CONFIAVEIS)" = 127.0.0.1/32 ]
 )
 echo 'ok: portas do próprio projeto não são conflito'
 
@@ -102,6 +129,22 @@ grep -q 'reverse_proxy 127.0.0.1:18081' "$RAIZ_PROJETO/deploy/proxy-externo.cadd
 # já escrito: garante não recarrega nem referencia variável inexistente.
 ( painel_recarrega_caddy() { exit 99; }; painel_garante_caddy )
 echo 'ok: painel retomado usa esquema correto e mantém bloqueios'
+
+# Painel que não sobe (pull falhou por rede ou disco) não fica ligado no .env nem no Caddy.
+(
+  env_set PAINEL_ATIVO ""
+  env_set DOMINIO_BASE exemplo.com.br
+  acesso_garante() { return 0; }
+  pergunta() { printf -v "$1" '%s' app; }
+  painel_espera_dns() { return 0; }
+  CINZA="" NORMAL=""
+  dc() { echo "dc $*" >>"$TEMP_TESTE/dc-painel"; [ "$1" != pull ]; }
+  if painel_liga >/dev/null; then echo 'FALHOU: painel que não subiu virou sucesso'; exit 1; fi
+  [ -z "$(env_get PAINEL_ATIVO)" ] || { echo 'FALHOU: PAINEL_ATIVO ficou ligado'; exit 1; }
+  ! grep -q 'app.exemplo.com.br' "$ARQ_CADDY_PAINEL" || { echo 'FALHOU: bloco do painel ficou no Caddy'; exit 1; }
+  grep -q '^dc rm -f painel' "$TEMP_TESTE/dc-painel" || { echo 'FALHOU: contêiner do painel ficou para trás'; exit 1; }
+)
+echo 'ok: painel que não sobe é desfeito'
 
 # Integração no host: invalidar antes de escrever, rollback no reload e recuperar interrupção.
 (
@@ -206,4 +249,17 @@ env_set TESTE valor
 [ "$(estado_get teste)" = preservado ] && [ "$(env_get TESTE)" = valor ]
 [ -z "$(find "$DIR_ESTADO" -name '.estado.*' -print)" ]
 echo 'ok: escrita atômica preserva estado e configuração'
+
+# Timer do backup e da WAHA roda como root com o HOME do operador: o arquivo novo leva o dono do
+# antigo, senão o estado e o .env viravam root e o `asimov` do operador parava de ler os dois.
+(
+  id() { [ "$1" = -u ] && echo 0; }
+  chown() { printf '%s\n' "$*" >>"$TEMP_TESTE/chown"; }
+  estado_set dono mantido
+  estado_remove dono
+  env_set DONO mantido
+  [ "$(grep -c -- "--reference=$ARQ_ESTADO " "$TEMP_TESTE/chown")" = 2 ]
+  grep -q -- "--reference=$ARQ_ENV " "$TEMP_TESTE/chown"
+)
+echo 'ok: estado e .env regravados como root mantêm o dono'
 echo 'Retomada e coexistência: todos os cenários passaram.'

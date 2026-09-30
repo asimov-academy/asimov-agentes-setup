@@ -3,7 +3,16 @@
 # pelo setup. Sem a variável o Compose para com erro, de propósito: `latest` na VPS faria duas
 # instalações iguais rodarem versões diferentes.
 
+# Log de contêiner com teto: o json-file padrão do Docker cresce sem limite (o worker registra dois
+# crons por minuto, a API e a WAHA cada mensagem) e enchia o disco da VPS, parando o Postgres.
+x-log: &log
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 x-backend: &backend
+  logging: *log
   image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-backend:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
   env_file: ../.env
   environment: &backend-env
@@ -27,6 +36,7 @@ x-backend: &backend
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    logging: *log
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -41,6 +51,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    logging: *log
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis:/data
@@ -65,7 +76,11 @@ services:
     environment:
       <<: *backend-env
       PAINEL_ATIVO: ""
+      # Até 20 jobs juntos mais os crons: o padrão de 15 conexões por processo não cabia.
+      BANCO_CONEXOES_EXTRAS: "20"
     command: ["arq", "app.worker.Configuracao"]
+    # O worker espera o turno em andamento por 120 s ao receber SIGTERM (`job_completion_wait`).
+    stop_grace_period: 150s
 
   # Painel do operador em app.<dominio>. Imagem privada, a única com o front dentro, aberta pelo
   # token da trilha (setup/lib/acesso.sh). Sobe pelo perfil `painel`, ligado por PAINEL_ATIVO=1 no
@@ -80,6 +95,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    logging: *log
     ports:
       - "${ASIMOV_HTTP_BIND:-80}:80"
       - "${ASIMOV_HTTPS_BIND:-443}:443"
@@ -87,6 +103,7 @@ services:
       SUBDOMINIO_BOT: ${SUBDOMINIO_BOT}
       EMAIL_SSL: ${EMAIL_SSL}
       ASIMOV_ESQUEMA: ${ASIMOV_ESQUEMA:-https}
+      ASIMOV_PROXIES_CONFIAVEIS: ${ASIMOV_PROXIES_CONFIAVEIS:-127.0.0.1/32}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Bloco do painel, escrito pelo setup quando o operador liga app.<dominio>.
@@ -107,6 +124,15 @@ services:
     # Uma imagem por CLI: o nome termina no valor de AGENTE_CODIGO (claude_code ou codex).
     image: "${ASIMOV_REGISTRO:-ghcr.io/asimov-academy}/agentes-copiloto-${AGENTE_CODIGO:-claude_code}:${ASIMOV_VERSAO:?rode o setup: falta ASIMOV_VERSAO no .env}"
     command: ["arq", "app.copiloto.worker.Configuracao"]
+    # O CLI herda o ambiente, e chave de API no ambiente vence o login da assinatura: uma
+    # ANTHROPIC_API_KEY de instalação antiga no .env fazia cada turno ser cobrado por token. Vazio
+    # aqui vence o env_file, e nada no copiloto usa chave de provedor.
+    environment:
+      <<: *backend-env
+      ANTHROPIC_API_KEY: ""
+      ANTHROPIC_AUTH_TOKEN: ""
+      OPENAI_API_KEY: ""
+      CODEX_API_KEY: ""
     # Com o dono da credencial, não com o usuário da imagem: o login do operador é 600 do dono
     # dele (root, em quase toda VPS), e outro uid não conseguiria nem abrir o arquivo.
     user: "${CREDENCIAL_IA_UID:-1000}:${CREDENCIAL_IA_GID:-1000}"
@@ -139,6 +165,7 @@ services:
   waha:
     # Imagem só com a engine GOWS (menor). setup/lib/waha.sh grava a tag arm quando a VPS é arm.
     image: devlikeapro/waha:${VERSAO_WAHA:-gows-2026.8.2}
+    logging: *log
     environment:
       WHATSAPP_DEFAULT_ENGINE: GOWS
       WAHA_API_KEY: ${WAHA_API_KEY}

@@ -19,6 +19,8 @@ ajuda() {
   printf '    %spainel%s        liga ou desliga o painel no navegador e gera o código de acesso\n' "$CIANO" "$NORMAL"
   printf '    %sia%s            entra na conta do Claude Code ou do Codex e liga o copiloto do painel\n' "$CIANO" "$NORMAL"
   printf '    %stoken%s         troca o token da trilha, que abre a imagem do painel\n' "$CIANO" "$NORMAL"
+  printf '    %sagente%s        comandos para evoluir um agente com o assistente de código (asimov agente ajuda)\n' "$CIANO" "$NORMAL"
+  printf '    %sferramenta%s    ferramentas próprias de um agente: testar, ativar, segredos (asimov ferramenta ajuda)\n' "$CIANO" "$NORMAL"
   printf '    %sdiagnostico%s   mostra versão e o que está respondendo\n' "$CIANO" "$NORMAL"
   printf '    %satualizar%s     baixa a versão nova e reinicia\n' "$CIANO" "$NORMAL"
   printf '    %sdesinstalar%s   remove da VPS tudo o que o Asimov instalou\n' "$CIANO" "$NORMAL"
@@ -52,6 +54,17 @@ case "${1:-menu}" in
   painel) roda fluxo_painel ;;
   ia) roda fluxo_vinculo ;;
   token) roda fluxo_token ;;
+  agente)
+    # Sem com_voltar: é comando para o assistente de código, sem tela e sem Esc.
+    exige_instalacao
+    shift
+    fluxo_agente "$@"
+    ;;
+  ferramenta)
+    exige_instalacao
+    shift
+    fluxo_ferramenta "$@"
+    ;;
   diagnostico | diagnóstico) roda fluxo_diagnostico ;;
   atualizar)
     # O install.sh local tem fixa a versão já instalada: baixa o da main.

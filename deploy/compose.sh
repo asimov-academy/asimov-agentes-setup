@@ -21,7 +21,12 @@ dc() {
   if grep -q '^ASSINATURA_NO_ATENDIMENTO=1$' "$RAIZ_PROJETO/.env" 2>/dev/null; then
     perfis+=(--profile assinatura)
   fi
+  # Contêineres de ferramentas das empresas: gerado por `asimov ferramenta ativar` (setup/lib/ferramentas.sh).
+  local extras=()
+  if [ -s "$RAIZ_PROJETO/deploy/ferramentas.compose.yml" ]; then
+    extras=(-f "$RAIZ_PROJETO/deploy/ferramentas.compose.yml")
+  fi
   ${SUDO:-} docker compose --project-name asimov \
     --env-file "$RAIZ_PROJETO/.env" \
-    -f "$RAIZ_PROJETO/deploy/docker-compose.yml" "${perfis[@]}" "$@"
+    -f "$RAIZ_PROJETO/deploy/docker-compose.yml" "${extras[@]}" "${perfis[@]}" "$@"
 }

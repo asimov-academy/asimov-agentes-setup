@@ -22,6 +22,26 @@ gera_arquivos_de_contexto() {
       rm -f "$temporario"
     fi
   done
+  garante_contexto_de_evolucao
+}
+
+# garante_contexto_de_evolucao: AGENTS.md que já existia (o instalador nunca o sobrescreve) ganha só
+# a seção de entrada, uma vez. O resto do texto do operador fica como está.
+MARCA_EVOLUCAO="<!-- asimov:evolucao -->"
+garante_contexto_de_evolucao() {
+  local agentes="$RAIZ_PROJETO/AGENTS.md"
+  [ -f "$agentes" ] || return 0
+  grep -qF "$MARCA_EVOLUCAO" "$agentes" && return 0
+  {
+    printf '\n'
+    sed -n "/$MARCA_EVOLUCAO/,/<!-- \/asimov:evolucao -->/p" "$RAIZ_PROJETO/modelos/AGENTS.md.tmpl"
+  } >>"$agentes"
+  printf 'AGENTS.md: acrescentada a seção de evolução de agentes\n' >>"$LOG"
+}
+
+# contexto_de_evolucao_ok: AGENTS.md com a orientação de entrada. Diagnóstico avisa quando falta.
+contexto_de_evolucao_ok() {
+  [ -s "$RAIZ_PROJETO/AGENTS.md" ] && grep -qF "$MARCA_EVOLUCAO" "$RAIZ_PROJETO/AGENTS.md"
 }
 
 instala_comando() {

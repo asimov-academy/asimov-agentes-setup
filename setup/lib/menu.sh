@@ -50,7 +50,7 @@ salva_agente() {
 # Provedor sem chave pede a chave na hora; a API guarda e ela vale no próximo turno.
 escolhe_modelo_do_agente() {
   local op campo funcao rotulo opcional="" reserva
-  local -a provedores=(openai anthropic gemini groq)
+  local -a provedores=(openai anthropic gemini groq openrouter)
   echo
   escolha op "Qual modelo" \
     "Resposta ao contato  ${CINZA}$(jq -r '.modelo_conversa' <<<"$AGENTE")${NORMAL}" \
@@ -79,7 +79,7 @@ escolhe_modelo_do_agente() {
   if [ "${MODELO_ESCOLHIDO%%:*}" = assinatura ] && [ -z "$(jq -r '.modelo_fallback // ""' <<<"$AGENTE")" ]; then
     echo
     dica "Pela assinatura o agente precisa de uma reserva com chave, para quando a janela de uso acabar."
-    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq
+    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq openrouter
     CORPO_MODELO=$(jq --arg f "$reserva" '. + {modelo_fallback: $f}' <<<"$CORPO_MODELO")
   fi
 }
@@ -125,12 +125,30 @@ fluxo_editar_agente() {
         acoes+=(edita_handoff)
         ;;
     esac
-    rotulos+=("Voltar")
+    rotulos+=("Nome da empresa" "Voltar")
+    acoes+=(edita_empresa)
     ESC_ESCOLHE=${#rotulos[@]} escolha op "O que mudar?" "${rotulos[@]}"
     [ "$op" -lt "${#rotulos[@]}" ] || return 0
     com_voltar "${acoes[$((op - 1))]}"
     [ "$FALHOU" = 0 ] || pausa
   done
+}
+
+# edita_empresa: troca o nome da empresa do agente escolhido, no modo empresa e na revenda. Vale
+# para todos os agentes dela; o identificador e a pasta dos prompts continuam os mesmos.
+edita_empresa() {
+  local valor
+  dica "Vale para todos os agentes de $AGENTE_EMPRESA. O endereço da página de privacidade continua o mesmo."
+  pergunta valor "Nome da empresa" "$AGENTE_EMPRESA"
+  [ "$valor" != "$AGENTE_EMPRESA" ] || return 0
+  api PATCH "/admin/clientes/$(jq -r '.cliente_id' <<<"$AGENTE")" "$(jq -n --arg v "$valor" '{nome: $v}')"
+  if [ "$API_STATUS" = 200 ]; then
+    AGENTE_EMPRESA=$(jq -r '.nome' <<<"$API_RESPOSTA")
+    RESULTADO=$(ok "Empresa agora é $(destaque "$AGENTE_EMPRESA")")
+  else
+    RESULTADO=$(falha "$(detalhe_erro "$API_RESPOSTA")")
+  fi
+  devolve AGENTE_EMPRESA RESULTADO
 }
 
 edita_nome() {
@@ -227,6 +245,9 @@ fluxo_diagnostico() {
   mostra_backup
   echo
   repara_caddy_host || true
+  if ! contexto_de_evolucao_ok; then
+    aviso "AGENTS.md vazio ou sem a orientação para evoluir agentes. Rode: asimov atualizar"
+  fi
   if [ "$(estado_get versao)" != "$VERSAO" ]; then
     aviso "A versão instalada não é a do código. Rode: asimov atualizar"
   fi

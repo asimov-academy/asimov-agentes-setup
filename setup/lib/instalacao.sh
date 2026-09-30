@@ -50,7 +50,7 @@ gera_segredos() {
   # precisa reiniciar a API para ela enxergar a chave nova.
   env_set_se_vazio WAHA_API_KEY "$(openssl rand -hex 32)"
   env_set_se_vazio LOG_NIVEL INFO
-  for variavel in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY MODELO_FALLBACK; do
+  for variavel in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY OPENROUTER_API_KEY MODELO_FALLBACK; do
     env_set_se_vazio "$variavel" ""
   done
   # Os contêineres rodam com o usuário 1000 e criam os prompts de cada agente.
@@ -63,6 +63,7 @@ gera_segredos() {
 ajusta_permissoes() {
   mkdir -p "$RAIZ_PROJETO/prompts"
   $SUDO chown -R 1000:1000 "$RAIZ_PROJETO/prompts"
+  prepara_ferramentas
 }
 
 # A VPS não constrói nada: puxa do GHCR as imagens da versão deste setup. ASIMOV_VERSAO é o que o
@@ -75,7 +76,8 @@ baixa_imagens() {
 sobe_banco() { dc up -d --wait postgres redis; }
 migra() { dc run --rm api alembic upgrade head; }
 sobe_servicos() {
-  dc up -d api worker caddy || return 1
+  dc up -d api worker caddy saida || return 1
+  ferramentas_sobe >>"$LOG" 2>&1 || aviso "Os contêineres de ferramentas dos agentes não subiram. Veja o log: $LOG"
   # Sem isto, `asimov atualizar` deixava o painel no contêiner da versão anterior. Só com a imagem
   # que já está no disco, e sem poder reprovar: aqui dentro de `sobe_versao`, o registro negando a
   # imagem privada (token vencido) desfazia a atualização inteira. Quem puxa é atualiza_privadas.

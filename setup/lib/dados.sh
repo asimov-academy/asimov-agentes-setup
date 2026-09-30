@@ -8,6 +8,7 @@ nome_bonito() {
     anthropic) echo Anthropic ;;
     gemini) echo Gemini ;;
     groq) echo Groq ;;
+    openrouter) echo OpenRouter ;;
     assinatura) echo "Assinatura ChatGPT" ;;
   esac
 }
@@ -130,7 +131,7 @@ escolhe_modelo_em() {
 # nascem no mesmo provedor e mudam em Editar agente > Modelos.
 escolhe_modelo_do_novo_agente() {
   local resposta audio reserva base
-  local -a provedores=(openai anthropic gemini groq)
+  local -a provedores=(openai anthropic gemini groq openrouter)
   assinatura_oferece && provedores+=(assinatura)
   dica "Cada agente tem a própria IA. Resumo, imagem e áudio seguem o mesmo provedor"
   dica "e mudam depois em Editar agente > Modelos."
@@ -142,14 +143,14 @@ escolhe_modelo_do_novo_agente() {
   if [ "$base" = assinatura ]; then
     echo
     dica "A reserva responde quando a janela de uso da assinatura acaba, e cuida de imagem e áudio."
-    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq
+    escolhe_modelo_em reserva "Reserva, com chave de API" conversa "" openai anthropic gemini groq openrouter
     MODELOS_NOVO_AGENTE=$(jq --arg f "$reserva" '. + {modelo_fallback: $f}' <<<"$MODELOS_NOVO_AGENTE")
     base=${reserva%%:*}
   fi
-  # A Anthropic não transcreve áudio: sem outro provedor com chave, o áudio precisa de um.
-  if [ "$base" = anthropic ] && ! provedor_tem_chave openai && ! provedor_tem_chave groq &&
-    ! provedor_tem_chave gemini; then
-    dica "A Anthropic não transcreve áudio. Escolha quem transcreve."
+  # Anthropic e OpenRouter não transcrevem áudio: sem outro provedor com chave, o áudio precisa de um.
+  if { [ "$base" = anthropic ] || [ "$base" = openrouter ]; } && ! provedor_tem_chave openai &&
+    ! provedor_tem_chave groq && ! provedor_tem_chave gemini; then
+    dica "$(nome_bonito "$base") não transcreve áudio. Escolha quem transcreve."
     escolhe_modelo_em audio "Transcrição de áudio" transcricao "" openai groq gemini
     MODELOS_NOVO_AGENTE=$(jq --arg a "$audio" '. + {modelo_transcricao: $a}' <<<"$MODELOS_NOVO_AGENTE")
   fi

@@ -69,7 +69,7 @@ escolhe_modelo_do_agente() {
     *) campo=modelo_transcricao funcao=transcricao rotulo="Transcrição de áudio" ;;
   esac
   # A assinatura ChatGPT (experimental) só conversa e resume, e só aparece quando a API diz que vale.
-  if { [ "$campo" = modelo_conversa ] || [ "$campo" = modelo_auxiliar ]; } && assinatura_vale; then
+  if { [ "$campo" = modelo_conversa ] || [ "$campo" = modelo_auxiliar ]; } && assinatura_oferece; then
     provedores+=(assinatura)
   fi
   escolhe_modelo_em MODELO_ESCOLHIDO "$rotulo" "$funcao" "$opcional" "${provedores[@]}"
@@ -214,6 +214,7 @@ fluxo_diagnostico() {
   campo "Versão instalada" "$(estado_get versao)"
   campo "Pasta" "$RAIZ_PROJETO"
   echo
+  mostra_caddy_host
   confere_endereco "API, por dentro" "${API_LOCAL:-http://127.0.0.1:8000}/health"
   confere_endereco "API, pelo domínio" "https://$sub/health"
   confere_endereco "Política de privacidade" "https://$sub/privacidade"
@@ -225,6 +226,7 @@ fluxo_diagnostico() {
   echo
   mostra_backup
   echo
+  repara_caddy_host || true
   if [ "$(estado_get versao)" != "$VERSAO" ]; then
     aviso "A versão instalada não é a do código. Rode: asimov atualizar"
   fi
@@ -257,18 +259,43 @@ mostra_backup() {
 
 # confere_endereco "rótulo" URL [--com-chave]: mostra o código HTTP de um endereço.
 confere_endereco() {
-  local rotulo=$1 url=$2 chave=${3:-} codigo
+  local rotulo=$1 url=$2 chave=${3:-} codigo erro=0 motivo
   if [ -n "$chave" ]; then
     codigo=$(printf 'X-Admin-Key: %s\n' "$(env_get CHAVE_API_ADMIN)" |
-      curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H @- "$url" || true)
+      curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H @- "$url") || erro=$?
   else
-    codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)
+    codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url") || erro=$?
   fi
   if [ "$codigo" = 200 ]; then
     campo "$rotulo" "$(printf '%s✓ %s%s' "$VERDE" "$codigo" "$NORMAL")"
   else
-    campo "$rotulo" "$(printf '%s✗ %s%s  %s%s%s' "$VERMELHO" "$codigo" "$NORMAL" "$CINZA" "$url" "$NORMAL")"
+    # `000` sozinho não diz nada: o erro do curl separa DNS, conexão e TLS.
+    motivo=$(motivo_do_curl "$erro")
+    campo "$rotulo" "$(printf '%s✗ %s%s  %s%s%s' "$VERMELHO" "${motivo:-$codigo}" "$NORMAL" "$CINZA" "$url" "$NORMAL")"
   fi
+}
+
+# motivo_do_curl CÓDIGO: o erro de rede em palavras. Vazio quando a conexão deu certo.
+motivo_do_curl() {
+  case "$1" in
+    0) ;;
+    6) echo "DNS não resolve" ;;
+    7) echo "conexão recusada" ;;
+    28) echo "sem resposta a tempo" ;;
+    35) echo "TLS recusado: o proxy não tem este domínio" ;;
+    51 | 60) echo "certificado inválido" ;;
+    *) echo "curl $1" ;;
+  esac
+}
+
+# mostra_caddy_host: a linha do diagnóstico sobre o Caddy da VPS, quando é ele quem tem as portas.
+mostra_caddy_host() {
+  case "$(situacao_caddy_host)" in
+    integrado) campo "Caddy da VPS" "$(printf '%s✓ integrado%s' "$VERDE" "$NORMAL")" ;;
+    manual) campo "Caddy da VPS" "domínio colado à mão no Caddyfile" ;;
+    perdido) campo "Caddy da VPS" "$(printf '%s✗ perdeu o endereço do Asimov%s' "$VERMELHO" "$NORMAL")" ;;
+    sem_integracao) campo "Caddy da VPS" "outro proxy, ajustado fora do Asimov" ;;
+  esac
 }
 
 # conecta_canal: liga o AGENTE nativo num canal externo. Prompt, modelos, ferramentas e conversas ficam.
@@ -644,6 +671,9 @@ menu_operador() {
   local -a rotulos acoes
   # Uma consulta só ao abrir: número fora do ar deixa o agente mudo e ninguém percebe sozinho.
   avisa_numeros_fora_do_ar
+  # O mesmo vale para o Caddy da VPS: outra ferramenta que regrava o Caddyfile tira o endereço do
+  # Asimov, e o Chatwoot só mostra "erro com o robô". Sem integração perdida, não pergunta nada.
+  repara_caddy_host || true
   while true; do
     secao "Menu"
     # A WAHA atualiza sozinha; o aviso aparece aqui quando ela precisou voltar para a versão anterior.

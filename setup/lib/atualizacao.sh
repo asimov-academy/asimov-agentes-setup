@@ -36,6 +36,13 @@ atualiza_privadas() {
   fi
 }
 
+# atualiza_assinatura: o contêiner da assinatura na versão nova. Imagem pública, mas fora de
+# `sobe_versao`: um experimento que não sobe não pode desfazer a atualização da plataforma.
+atualiza_assinatura() {
+  assinatura_ligada || return 0
+  assinatura_acerta || aviso "O contêiner da assinatura não subiu na versão nova: os agentes respondem pela reserva."
+}
+
 # volta_versao ANTERIOR REVISAO: imagens, banco e arquivos do setup de volta ao que estava no ar.
 volta_versao() {
   local anterior=$1 revisao=$2 pasta
@@ -89,6 +96,7 @@ atualiza_plataforma() {
   printf '\r\033[K'
   ok "Versão $(destaque "v$VERSAO") no ar."
   atualiza_privadas
+  atualiza_assinatura
   echo
   # O que já foi feito aqui não repete na tela de instalação, que confere o resto (HTTPS, WAHA, backup).
   local passo_feito

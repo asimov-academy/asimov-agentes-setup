@@ -10,6 +10,9 @@ QUADROS_ESPERA=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 
 fluxo_conversar() {
   secao "Conversar com agente"
+  # Esta conversa não passa pelo endereço público: ela funcionar não prova que o canal funciona.
+  dica "Aqui o agente responde por dentro. Chatwoot e WhatsApp oficial chegam pelo endereço público:"
+  dica "$(destaque "asimov diagnostico") confere se ele responde."
   if ! escolhe_agente; then
     pausa
     return 0

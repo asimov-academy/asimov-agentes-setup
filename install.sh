@@ -31,16 +31,30 @@ if [ -t 0 ] && [ -t 1 ] && [ -z "${ASIMOV_TTY:-}" ] && [ -z "${TMUX:-}" ] && [ -
     (umask 077; curl -fsSL https://raw.githubusercontent.com/asimov-academy/asimov-agentes-setup/main/install.sh -o "$sessao_script")
   fi
   printf -v sessao_comando 'env ASIMOV_SESSAO=1 ASIMOV_ESTADO_DIR=%q ASIMOV_ATUALIZAR=%q ASIMOV_DIR=%q ASIMOV_VERSAO=%q ASIMOV_PACOTE=%q ASIMOV_SHA256=%q bash %q' \
-    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.35.1}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
+    "$ASIMOV_ESTADO_DIR" "${ASIMOV_ATUALIZAR:-}" "${ASIMOV_DIR:-$HOME/asimov-agentes}" "${ASIMOV_VERSAO:-v0.35.2}" "${ASIMOV_PACOTE:-}" "${ASIMOV_SHA256:-}" "$sessao_script"
   echo "Se a conexão cair, rode o mesmo comando ou: tmux attach -t asimov-instalacao"
   exec tmux new-session -A -s asimov-instalacao "$sessao_comando"
 fi
+# Dentro da sessão do tmux, sair com erro fechava a tela junto e a mensagem sumia: o operador só via
+# `[exited]` (aconteceu com a tag do instalador ainda por sair e com duas instalações ao mesmo tempo).
+temp=""
+segura_tela() {
+  local codigo=$?
+  [ -n "$temp" ] && rm -rf "$temp"
+  if [ "$codigo" != 0 ] && [ -n "${ASIMOV_SESSAO:-}" ]; then
+    echo
+    echo "A instalação parou. O motivo está na mensagem acima."
+    read -r -p "Enter para fechar esta tela. " _ </dev/tty 2>/dev/null || sleep 60
+  fi
+}
+trap segura_tela EXIT
+
 mkdir -p "$ASIMOV_ESTADO_DIR"; chmod 700 "$ASIMOV_ESTADO_DIR"
 exec 9>"$ASIMOV_ESTADO_DIR/instalacao.lock"
 flock -n 9 || { echo "Outra instalação está em andamento. Use: tmux attach -t asimov-instalacao"; exit 1; }
 export ASIMOV_LOCK=1
 
-VERSAO="${ASIMOV_VERSAO:-v0.35.1}"
+VERSAO="${ASIMOV_VERSAO:-v0.35.2}"
 PACOTE="${ASIMOV_PACOTE:-https://codeload.github.com/asimov-academy/asimov-agentes-setup/tar.gz/$VERSAO}"
 SHA256="${ASIMOV_SHA256:-}"
 DESTINO="${ASIMOV_DIR:-$HOME/asimov-agentes}"
@@ -56,10 +70,13 @@ command -v curl >/dev/null 2>&1 || { echo "Instale o curl: apt-get install -y cu
 command -v tar >/dev/null 2>&1 || { echo "Instale o tar: apt-get install -y tar"; exit 1; }
 
 temp=$(mktemp -d)
-trap 'rm -rf "$temp"' EXIT
 
 echo "Baixando o instalador $VERSAO..."
-curl -fsSL "$PACOTE" -o "$temp/pacote.tar.gz"
+if ! curl -fsSL "$PACOTE" -o "$temp/pacote.tar.gz"; then
+  echo "Não consegui baixar o instalador $VERSAO."
+  echo "Se a versão acabou de sair, espere alguns minutos e rode o comando de novo."
+  exit 1
+fi
 if [ -n "$SHA256" ]; then
   echo "$SHA256  $temp/pacote.tar.gz" | sha256sum -c --quiet - || {
     echo "O pacote baixado não confere com o checksum esperado. Abortando."

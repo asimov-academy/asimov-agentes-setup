@@ -5,8 +5,8 @@
 set -Eeuo pipefail
 RAIZ_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe)
-  local nome=$1 quebrada=$2 dir resultado=0
+cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe) [PAINEL(1 ligado, token vencido)]
+  local nome=$1 quebrada=$2 painel=${3:-} dir resultado=0
   dir=$(mktemp -d)
   # Cópia da instalação, porque a volta apaga e restaura pastas de verdade.
   mkdir -p "$dir/projeto" "$dir/guardado"
@@ -22,9 +22,14 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe)
     clear() { :; }
     env_set ASIMOV_VERSAO v0.0.1
     estado_set versao 0.0.1
+    [ -z "$painel" ] || env_set PAINEL_ATIVO 1
     dc() {
       echo "[$(env_get ASIMOV_VERSAO)] dc $*" >>"$dir/dc.log"
       case "$*" in *"alembic current"*) echo "abc123 (head)" ;; esac
+      # Token vencido: o registro recusa a imagem privada, e o `up` sem ela no disco falha.
+      if [ -n "$painel" ] && [ "$(env_get ASIMOV_VERSAO)" != v0.0.1 ]; then
+        case "$*" in "pull painel" | *"up "*painel*) return 1 ;; esac
+      fi
     }
     # A API só responde saudável na versão anterior quando o cenário é o da versão quebrada.
     espera_url() { [ "$quebrada" = 0 ] || [ "$(env_get ASIMOV_VERSAO)" = v0.0.1 ]; }
@@ -35,8 +40,11 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe)
   local versao
   versao=$(grep -m1 '^ASIMOV_VERSAO=' "$dir/projeto/.env" | cut -d= -f2)
   if [ "$quebrada" = 0 ]; then
-    [ "$resultado" = 0 ] && [ "$versao" != v0.0.1 ] && grep -q "tela_instalacao" "$dir/dc.log" ||
+    [ "$resultado" = 0 ] && [ "$versao" != v0.0.1 ] && grep -q "tela_instalacao" "$dir/dc.log" &&
+      ! grep -q "alembic downgrade" "$dir/dc.log" ||
       { echo "FALHOU: $nome"; cat "$dir/saida.log" "$dir/dc.log"; exit 1; }
+    [ -z "$painel" ] || grep -q "Token vencido" "$dir/saida.log" ||
+      { echo "FALHOU: $nome (sem aviso do token)"; cat "$dir/saida.log"; exit 1; }
   else
     [ "$resultado" != 0 ] && [ "$versao" = v0.0.1 ] &&
       grep -q "alembic downgrade abc123" "$dir/dc.log" &&
@@ -49,3 +57,4 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe)
 
 cenario "versão nova sobe" 0
 cenario "versão nova não sobe e volta para a anterior" 1
+cenario "painel com token vencido não desfaz a versão nova" 0 1

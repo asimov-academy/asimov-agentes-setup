@@ -76,8 +76,13 @@ sobe_banco() { dc up -d --wait postgres redis; }
 migra() { dc run --rm api alembic upgrade head; }
 sobe_servicos() {
   dc up -d api worker caddy || return 1
-  # Sem isto, `asimov atualizar` deixava o painel no contêiner da versão anterior.
-  if painel_ligado; then dc up -d --force-recreate painel >>"$LOG" 2>&1 || return 1; fi
+  # Sem isto, `asimov atualizar` deixava o painel no contêiner da versão anterior. Só com a imagem
+  # que já está no disco, e sem poder reprovar: aqui dentro de `sobe_versao`, o registro negando a
+  # imagem privada (token vencido) desfazia a atualização inteira. Quem puxa é atualiza_privadas.
+  if painel_ligado; then
+    dc up -d --no-deps --pull never --force-recreate painel >>"$LOG" 2>&1 ||
+      aviso "O painel seguiu no contêiner anterior. Veja o log: $LOG"
+  fi
   # O Caddyfile é montado, então atualizar o projeto muda o arquivo mas não o que o Caddy já
   # carregou: caminho público novo continuava respondendo 404 depois de `asimov atualizar`.
   # `reload` não derruba conexão; se ele falhar (contêiner recém-criado, por exemplo), reinicia.

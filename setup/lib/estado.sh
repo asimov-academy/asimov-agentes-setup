@@ -7,6 +7,20 @@ estado_iniciar() {
   chmod 700 "$DIR_ESTADO"
   touch "$ARQ_ESTADO" "$LOG"
   chmod 600 "$ARQ_ESTADO" "$LOG"
+  # Como root (timer), devolve ao operador o que um timer de versão anterior deixou com dono root.
+  mantem_dono "$DIR_ESTADO" "$ARQ_ESTADO"
+  mantem_dono "$DIR_ESTADO" "$LOG"
+  [ ! -f "${ARQ_ENV:-}" ] || mantem_dono "$(dirname "$ARQ_ENV")" "$ARQ_ENV"
+}
+
+# mantem_dono REFERENCIA ARQUIVO: como root, o arquivo novo fica com o dono da referência. Os timers
+# do backup e da WAHA rodam como root com o HOME do operador, e o `mv` de um temporário criado por
+# eles deixava o estado e o .env com dono root: numa instalação feita com sudo, o `asimov` do
+# operador parava de ler os dois ("A instalação ainda não terminou", chamadas sem X-Admin-Key).
+mantem_dono() {
+  [ "$(id -u)" = 0 ] || return 0
+  [ -e "$1" ] || return 0
+  chown --reference="$1" "$2" 2>/dev/null || true
 }
 
 estado_get() {
@@ -20,6 +34,7 @@ estado_set() {
   temp=$(mktemp "$DIR_ESTADO/.estado.XXXXXX")
   grep -v "^$1=" "$ARQ_ESTADO" >"$temp" 2>/dev/null || true
   printf '%s=%s\n' "$1" "$2" >>"$temp"
+  if [ -e "$ARQ_ESTADO" ]; then mantem_dono "$ARQ_ESTADO" "$temp"; else mantem_dono "$DIR_ESTADO" "$temp"; fi
   mv "$temp" "$ARQ_ESTADO"
   chmod 600 "$ARQ_ESTADO"
 }
@@ -32,6 +47,7 @@ estado_remove() {
     grep -v "^$chave=" "$temp" >"$temp.novo" || true
     mv "$temp.novo" "$temp"
   done
+  mantem_dono "$ARQ_ESTADO" "$temp"
   mv "$temp" "$ARQ_ESTADO"
   chmod 600 "$ARQ_ESTADO"
 }
@@ -61,13 +77,18 @@ env_get() {
 # env_set CHAVE VALOR: grava no .env com permissão 600, substituindo o valor anterior.
 env_set() {
   local temp
-  [ -f "$ARQ_ENV" ] || install -m 600 /dev/null "$ARQ_ENV"
+  if [ ! -f "$ARQ_ENV" ]; then
+    install -m 600 /dev/null "$ARQ_ENV"
+    mantem_dono "$(dirname "$ARQ_ENV")" "$ARQ_ENV"
+  fi
   temp=$(mktemp "$DIR_ESTADO/.estado.XXXXXX")
   grep -v "^$1=" "$ARQ_ENV" >"$temp" || true
   printf '%s=%s\n' "$1" "$2" >>"$temp"
   local destino
   destino=$(mktemp "${ARQ_ENV}.XXXXXX") || return 1
-  install -m 600 "$temp" "$destino" && mv -f "$destino" "$ARQ_ENV" || return 1
+  install -m 600 "$temp" "$destino" || return 1
+  mantem_dono "$ARQ_ENV" "$destino"
+  mv -f "$destino" "$ARQ_ENV" || return 1
   rm -f "$temp"
 }
 

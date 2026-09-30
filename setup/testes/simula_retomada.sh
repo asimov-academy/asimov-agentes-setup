@@ -233,4 +233,17 @@ env_set TESTE valor
 [ "$(estado_get teste)" = preservado ] && [ "$(env_get TESTE)" = valor ]
 [ -z "$(find "$DIR_ESTADO" -name '.estado.*' -print)" ]
 echo 'ok: escrita atômica preserva estado e configuração'
+
+# Timer do backup e da WAHA roda como root com o HOME do operador: o arquivo novo leva o dono do
+# antigo, senão o estado e o .env viravam root e o `asimov` do operador parava de ler os dois.
+(
+  id() { [ "$1" = -u ] && echo 0; }
+  chown() { printf '%s\n' "$*" >>"$TEMP_TESTE/chown"; }
+  estado_set dono mantido
+  estado_remove dono
+  env_set DONO mantido
+  [ "$(grep -c -- "--reference=$ARQ_ESTADO " "$TEMP_TESTE/chown")" = 2 ]
+  grep -q -- "--reference=$ARQ_ENV " "$TEMP_TESTE/chown"
+)
+echo 'ok: estado e .env regravados como root mantêm o dono'
 echo 'Retomada e coexistência: todos os cenários passaram.'

@@ -11,6 +11,10 @@ ele explique o processo.
 
 ## 0. Achar o agente e retomar
 
+Os comandos `asimov` falam com a API local e com o Docker: rodam fora do sandbox do assistente. A
+instalação já libera `asimov agente` e `asimov ferramenta` no Codex e no Claude Code. Se ainda
+assim aparecer "a API local não respondeu", peça ao operador para aprovar rodar fora do sandbox.
+
 1. `asimov agente listar` mostra empresas e agentes com a referência de cada um (`empresa/agente`).
    Se o pacote não deixar claro qual é, pergunte. Nunca aplique em agente escolhido por palpite.
 2. `asimov agente preparar <ref>` cria ou atualiza a pasta privada do agente e mostra o caminho:

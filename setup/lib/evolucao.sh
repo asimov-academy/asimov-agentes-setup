@@ -16,7 +16,7 @@ ev_erro() {
 ev_api() {
   api "$@"
   if [ "$API_STATUS" = 000 ]; then
-    ev_erro "a API não respondeu em $API_LOCAL. Veja: source deploy/compose.sh && dc logs api"
+    ev_erro "a API local não respondeu em $API_LOCAL. Se você é o Codex ou o Claude Code, o comando rodou no sandbox sem rede: rode de novo fora do sandbox (peça a aprovação do operador). Se não, veja: source deploy/compose.sh && dc logs api"
   fi
 }
 

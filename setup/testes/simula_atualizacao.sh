@@ -13,6 +13,10 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe) [PAINEL(1 ligado, 
   cp -R "$RAIZ_REPO/setup" "$RAIZ_REPO/deploy" "$RAIZ_REPO/modelos" "$dir/projeto/"
   cp -R "$RAIZ_REPO/setup" "$RAIZ_REPO/deploy" "$RAIZ_REPO/modelos" "$dir/guardado/"
   echo "marca da versão anterior" >"$dir/guardado/setup/MARCA"
+  # api, worker e caddy montam essas pastas: a volta tem que manter o mesmo diretório.
+  local inode_modelos inode_extras
+  inode_modelos=$(ls -di "$dir/projeto/modelos" | awk '{print $1}')
+  inode_extras=$(ls -di "$dir/projeto/deploy/caddy" | awk '{print $1}')
   (
     export HOME=$dir ASIMOV_GUARDADO=$dir/guardado
     RAIZ_PROJETO=$dir/projeto
@@ -25,7 +29,11 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe) [PAINEL(1 ligado, 
     [ -z "$painel" ] || env_set PAINEL_ATIVO 1
     dc() {
       echo "[$(env_get ASIMOV_VERSAO)] dc $*" >>"$dir/dc.log"
-      case "$*" in *"alembic current"*) echo "abc123 (head)" ;; esac
+      case "$*" in
+        *"alembic current"*) echo "abc123 (head)" ;;
+        # O contêiner ainda enxerga o Caddyfile de antes da extração (inode antigo).
+        *"cat /etc/caddy/Caddyfile"*) echo "Caddyfile antigo" ;;
+      esac
       # Token vencido: o registro recusa a imagem privada, e o `up` sem ela no disco falha.
       if [ -n "$painel" ] && [ "$(env_get ASIMOV_VERSAO)" != v0.0.1 ]; then
         case "$*" in "pull painel" | *"up "*painel*) return 1 ;; esac
@@ -43,6 +51,8 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe) [PAINEL(1 ligado, 
     [ "$resultado" = 0 ] && [ "$versao" != v0.0.1 ] && grep -q "tela_instalacao" "$dir/dc.log" &&
       ! grep -q "alembic downgrade" "$dir/dc.log" ||
       { echo "FALHOU: $nome"; cat "$dir/saida.log" "$dir/dc.log"; exit 1; }
+    grep -q "dc restart caddy" "$dir/dc.log" ||
+      { echo "FALHOU: $nome (Caddy com o Caddyfile antigo não reiniciou)"; cat "$dir/dc.log"; exit 1; }
     [ -z "$painel" ] || grep -q "Token vencido" "$dir/saida.log" ||
       { echo "FALHOU: $nome (sem aviso do token)"; cat "$dir/saida.log"; exit 1; }
   else
@@ -50,6 +60,9 @@ cenario() { # cenario NOME SAUDE_DA_NOVA(0 sobe, 1 não sobe) [PAINEL(1 ligado, 
       grep -q "alembic downgrade abc123" "$dir/dc.log" &&
       [ -f "$dir/projeto/setup/MARCA" ] && ! grep -q "tela_instalacao" "$dir/dc.log" ||
       { echo "FALHOU: $nome"; cat "$dir/saida.log" "$dir/dc.log"; exit 1; }
+    [ "$(ls -di "$dir/projeto/modelos" | awk '{print $1}')" = "$inode_modelos" ] &&
+      [ "$(ls -di "$dir/projeto/deploy/caddy" | awk '{print $1}')" = "$inode_extras" ] ||
+      { echo "FALHOU: $nome (a volta trocou pasta montada nos contêineres)"; exit 1; }
   fi
   echo "ok: $nome"
   rm -rf "$dir"

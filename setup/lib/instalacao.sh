@@ -83,11 +83,32 @@ sobe_servicos() {
     dc up -d --no-deps --pull never --force-recreate painel >>"$LOG" 2>&1 ||
       aviso "O painel seguiu no contêiner anterior. Veja o log: $LOG"
   fi
-  # O Caddyfile é montado, então atualizar o projeto muda o arquivo mas não o que o Caddy já
-  # carregou: caminho público novo continuava respondendo 404 depois de `asimov atualizar`.
-  # `reload` não derruba conexão; se ele falhar (contêiner recém-criado, por exemplo), reinicia.
-  dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1 ||
+  caddy_carrega
+}
+
+# caddy_ve_o_disco: o contêiner lê o mesmo Caddyfile e os mesmos blocos extras que estão no disco.
+# O Caddyfile é montado como arquivo, e montagem de arquivo fica presa ao inode de quando o
+# contêiner subiu: o tar da atualização cria arquivo novo, e o Caddy seguia lendo o antigo.
+caddy_ve_o_disco() {
+  local arquivo
+  dc exec -T caddy cat /etc/caddy/Caddyfile 2>/dev/null | cmp -s - "$RAIZ_PROJETO/deploy/Caddyfile" ||
     return 1
+  for arquivo in "$RAIZ_PROJETO"/deploy/caddy/*.caddy; do
+    [ -f "$arquivo" ] || continue
+    dc exec -T caddy cat "/etc/caddy/extras/${arquivo##*/}" 2>/dev/null | cmp -s - "$arquivo" || return 1
+  done
+}
+
+# caddy_carrega: o Caddy passa a servir o que está no disco. Mudar um arquivo montado não muda o
+# que ele já carregou: caminho público novo continuava respondendo 404 depois de `asimov atualizar`.
+# `reload` não derruba conexão, mas relê o arquivo pelo contêiner; se o contêiner vê outro arquivo,
+# só reiniciar monta de novo o que está no disco.
+caddy_carrega() {
+  if caddy_ve_o_disco; then
+    dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1
+  else
+    dc restart caddy >>"$LOG" 2>&1
+  fi
 }
 
 espera_url() {

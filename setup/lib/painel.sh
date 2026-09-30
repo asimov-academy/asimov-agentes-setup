@@ -50,8 +50,7 @@ CADDY
 painel_recarrega_caddy() {
   configura_proxy_externo || return 1
   dc up -d caddy >>"$LOG" 2>&1 || return 1
-  dc exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile >>"$LOG" 2>&1 ||
-    return 1
+  caddy_carrega
 }
 
 # Quem monta as telas do painel é o serviço `painel`, num contêiner à parte com a imagem privada.

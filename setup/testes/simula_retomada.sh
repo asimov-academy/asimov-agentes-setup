@@ -32,9 +32,32 @@ confirma() { echo "Pergunta técnica inesperada" >&2; exit 99; }
 # Retorno de subida não pode ser mascarado pelo reload.
 dc() { [ "$1" != up ]; }
 if sobe_servicos; then echo 'FALHOU: up recusado virou sucesso'; exit 1; fi
-dc() { [ "$1" != exec ]; }
+printf 'bot.exemplo {\n}\n' >"$RAIZ_PROJETO/deploy/Caddyfile"
+printf '# painel\n' >"$RAIZ_PROJETO/deploy/caddy/painel.caddy"
+# O contêiner enxerga o que está no disco: vale o reload, e o reload recusado propaga.
+dc() {
+  case "$*" in
+    *"caddy reload"*) echo reload >>"$TEMP_TESTE/caddy"; return 1 ;;
+    *restart*) echo restart >>"$TEMP_TESTE/caddy" ;;
+    "exec -T caddy cat /etc/caddy/Caddyfile") cat "$RAIZ_PROJETO/deploy/Caddyfile" ;;
+    "exec -T caddy cat /etc/caddy/extras/"*) cat "$RAIZ_PROJETO/deploy/caddy/$(basename "$5")" ;;
+  esac
+}
 if sobe_servicos; then echo 'FALHOU: reload recusado virou sucesso'; exit 1; fi
-echo 'ok: erros de subida e reload propagados'
+[ "$(cat "$TEMP_TESTE/caddy")" = reload ] || { echo 'FALHOU: reiniciou com o arquivo em dia'; exit 1; }
+# O contêiner preso ao inode antigo do Caddyfile: reinicia, e o restart recusado propaga.
+rm -f "$TEMP_TESTE/caddy"
+dc() {
+  case "$*" in
+    *restart*) echo restart >>"$TEMP_TESTE/caddy"; return 1 ;;
+    *"caddy reload"*) echo reload >>"$TEMP_TESTE/caddy" ;;
+    "exec -T caddy cat /etc/caddy/Caddyfile") echo "Caddyfile antigo" ;;
+  esac
+}
+if sobe_servicos; then echo 'FALHOU: restart recusado virou sucesso'; exit 1; fi
+[ "$(cat "$TEMP_TESTE/caddy")" = restart ] || { echo 'FALHOU: recarregou o Caddyfile antigo'; exit 1; }
+rm -f "$TEMP_TESTE/caddy" "$RAIZ_PROJETO/deploy/Caddyfile"
+echo 'ok: erros de subida, reload e restart propagados; Caddyfile antigo reinicia o Caddy'
 
 # Checkpoint válido não repete; inválido reconcilia, depois grava novamente.
 (

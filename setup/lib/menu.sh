@@ -462,7 +462,7 @@ edita_conhecimento() {
     fi
 
     ESC_ESCOLHE=8 escolha op "Base de conhecimento" \
-      "Enviar um arquivo  ${CINZA}PDF, DOCX, XLSX, CSV, TXT, MD ou HTML que já está na VPS${NORMAL}" \
+      "Enviar um arquivo  ${CINZA}PDF, DOCX, XLSX, CSV, TXT, MD, HTML ou foto que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
       "Ver trechos de um material  ${CINZA}o que a busca enxerga${NORMAL}" \

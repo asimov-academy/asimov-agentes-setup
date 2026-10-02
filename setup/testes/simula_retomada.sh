@@ -226,6 +226,48 @@ echo 'ok: candidato inválido não altera host; reload falho e interrupção rec
 )
 echo 'ok: integração perdida é vista e refeita; domínio colado à mão não trava'
 
+# O bot colado à mão antes de o painel existir (VPS de 02/10): o painel precisa de endereço próprio,
+# sem duplicar o do bot, e o diagnóstico enxerga o buraco em vez de dizer "colado à mão" e calar.
+(
+  HOST_CONFIG="$TEMP_TESTE/painel-depois/Caddyfile"
+  mkdir -p "$(dirname "$HOST_CONFIG")"
+  printf 'outro.exemplo.com.br { respond "preservado" }\nbot.exemplo.com.br {\n reverse_proxy 127.0.0.1:18081\n}\n' >"$HOST_CONFIG"
+  caddy() { return 0; }
+  systemctl() {
+    case "$1" in
+      is-active) return 0 ;;
+      show) echo "{ argv[]=caddy run --config $HOST_CONFIG --adapter caddyfile ; }" ;;
+      reload) return 0 ;;
+    esac
+  }
+  confirma() { return 0; }
+  env_set ASIMOV_PROXY externo
+  env_set SUBDOMINIO_BOT bot.exemplo.com.br
+  env_set SUBDOMINIO_APP app.exemplo.com.br
+  # Bot colado, painel desligado: nada a importar.
+  env_set PAINEL_ATIVO ""
+  estado_remove proxy_host_integrado
+  estado_set proxy_host_caddyfile "$HOST_CONFIG"
+  integra_caddy_ou_explica >/dev/null
+  [ "$(situacao_caddy_host)" = manual ]
+  if grep -q '^import ' "$HOST_CONFIG"; then exit 1; fi
+  # Painel ligado depois: o app entra no bloco do Asimov, o bot não se repete.
+  env_set PAINEL_ATIVO 1
+  [ "$(situacao_caddy_host)" = perdido ]
+  repara_caddy_host >/dev/null
+  [ "$(situacao_caddy_host)" = integrado ]
+  [ "$(grep -c '^import ' "$HOST_CONFIG")" = 1 ]
+  grep -q '^app.exemplo.com.br {' "$TEMP_TESTE/painel-depois/asimov.caddy"
+  if grep -q 'bot.exemplo.com.br' "$TEMP_TESTE/painel-depois/asimov.caddy"; then exit 1; fi
+  [ "$(grep -c 'bot.exemplo.com.br' "$HOST_CONFIG")" = 1 ]
+  # Operador cola o app à mão depois: sai do bloco do Asimov, sem duplicar.
+  printf 'app.exemplo.com.br {\n reverse_proxy 127.0.0.1:18081\n}\n' >>"$HOST_CONFIG"
+  [ "$(situacao_caddy_host)" = manual ]
+  integra_caddy_ou_explica >/dev/null
+  if grep -q 'app.exemplo.com.br' "$RAIZ_PROJETO/deploy/proxy-externo.caddy"; then exit 1; fi
+)
+echo 'ok: bot colado à mão não deixa o painel sem endereço no Caddy da VPS'
+
 # Caddy padrão é integrado sem pergunta; proxy desconhecido preserva o host e para.
 (
   env_set ASIMOV_PROXY externo

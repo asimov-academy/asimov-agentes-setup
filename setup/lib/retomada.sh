@@ -71,6 +71,18 @@ confere_https_depois_de_atualizar() {
   aviso "O endereço público não respondeu depois de atualizar. Rode $(destaque "asimov diagnostico")."
 }
 
+# confere_painel_depois_de_atualizar: o painel tem endereço próprio no Caddy da VPS, que pode ter
+# ficado de fora (bot colado à mão antes de o painel existir). Só aviso, como o do bot.
+confere_painel_depois_de_atualizar() {
+  local sub
+  painel_ligado || return 0
+  sub=$(env_get SUBDOMINIO_APP)
+  [ -n "$sub" ] || return 0
+  curl -fsS -o /dev/null --connect-timeout 5 --max-time 10 "https://$sub/painel/entrar" >>"$LOG" 2>&1 && return 0
+  aviso "O painel não respondeu em $(destaque "https://$sub"). Rode $(destaque "asimov diagnostico")."
+  repara_caddy_host || true
+}
+
 confere_https() {
   local sub=$1 codigo=000 resultado=0 corpo
   servico_rodando caddy || { echo "O Caddy do Asimov não está rodando."; return 1; }

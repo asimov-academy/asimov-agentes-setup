@@ -205,6 +205,9 @@ painel_liga() {
     ok "Painel no ar em $(destaque "https://$sub")"
   else
     aviso "O painel subiu, mas o endereço ainda não respondeu. O certificado pode levar um minuto."
+    # Endereço que some do Caddy da VPS é o motivo mais comum: oferece refazer, sem mexer em nada
+    # antes de o operador confirmar.
+    repara_caddy_host || true
   fi
   painel_mostra_codigo
 }

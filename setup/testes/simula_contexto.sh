@@ -53,6 +53,7 @@ sed -n '/^atualiza() {/,/^}/p' "$REPO/setup/instalar.sh" >"$TEMP_TESTE/atualiza.
 source "$TEMP_TESTE/atualiza.sh"
 banner_asimov() { :; }; tela_modo() { :; }; atualiza_plataforma() { :; }
 confere_https_depois_de_atualizar() { :; }
+confere_painel_depois_de_atualizar() { :; }
 ajusta_permissoes() { :; }; painel_garante_caddy() { :; }; garante_waha() { :; }
 instala_timer_waha() { :; }; reconfigura_sessoes_waha() { :; }
 tela_handoff_pendente() { :; }; tela_vinculo_ia() { :; }; tela_painel_oferta() { :; }

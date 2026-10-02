@@ -461,10 +461,11 @@ edita_conhecimento() {
       dica "Ele ainda não sabe nada além do prompt."
     fi
 
-    ESC_ESCOLHE=7 escolha op "Base de conhecimento" \
-      "Enviar um arquivo  ${CINZA}PDF, DOCX, TXT ou MD que já está na VPS${NORMAL}" \
+    ESC_ESCOLHE=8 escolha op "Base de conhecimento" \
+      "Enviar um arquivo  ${CINZA}PDF, DOCX, XLSX, CSV, TXT, MD ou HTML que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
+      "Ver trechos de um material  ${CINZA}o que a busca enxerga${NORMAL}" \
       "Ler de novo um material  ${CINZA}relê o original guardado${NORMAL}" \
       "Ler de novo tudo  ${CINZA}depois de trocar a chave de IA, por exemplo${NORMAL}" \
       "Remover um material" \
@@ -487,13 +488,18 @@ edita_conhecimento() {
         api POST "$caminho/site" "$(jq -n --arg u "$url" '{url: $u}')"
         ;;
       4)
+        escolhe_documento "$documentos" "Ver os trechos de qual?" || continue
+        mostra_trechos "$caminho/$DOCUMENTO_ID"
+        continue
+        ;;
+      5)
         escolhe_documento "$documentos" "Ler de novo qual?" || continue
         api POST "$caminho/$DOCUMENTO_ID/reprocessar"
         ;;
-      5)
+      6)
         api POST "$caminho/reprocessar"
         ;;
-      6)
+      7)
         escolhe_documento "$documentos" || continue
         api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
@@ -506,6 +512,22 @@ edita_conhecimento() {
     fi
     pausa
   done
+}
+
+# mostra_trechos CAMINHO_DO_DOCUMENTO: os primeiros trechos, como a busca enxerga, com seção e
+# páginas. O painel mostra todos, com a tabela desenhada.
+mostra_trechos() {
+  api GET "$1/trechos?pagina=1"
+  if [ "$API_STATUS" != 200 ]; then
+    printf '%s\n' "$(falha "$(detalhe_erro "$API_RESPOSTA")")"
+    pausa
+    return 0
+  fi
+  jq -r --arg cinza "$CINZA" --arg normal "$NORMAL" '
+    .trechos[] |
+    "\($cinza)#\(.ordem)\(if .secao != "" then "  " + .secao else "" end)\(if .pagina_inicio != null then "  p. \(.pagina_inicio)" + (if .pagina_fim != .pagina_inicio then " a \(.pagina_fim)" else "" end) else "" end)\(if .tipo == "tabela" then "  tabela" else "" end)\($normal)\n\(.texto)\n"' <<<"$API_RESPOSTA"
+  jq -r 'if .total > (.trechos | length) then "  ... e mais \(.total - (.trechos | length)) trechos; o painel mostra todos." else empty end' <<<"$API_RESPOSTA"
+  pausa
 }
 
 # escolhe_documento JSON: grava o id escolhido em DOCUMENTO_ID, ou sai diferente de 0 quando não

@@ -22,13 +22,18 @@ AGENTE='{"id": "a1", "cliente_id": "c1", "nome": "Ana"}'
 api() {
   printf '%s %s\n' "$1" "$2" >>"$TEMP_TESTE/chamadas"
   API_STATUS=200
-  API_RESPOSTA='[{"id": "d1", "nome": "catalogo.pdf", "status": "pronto", "total_trechos": 3, "erro": ""}]'
+  case "$2" in
+    */trechos*)
+      API_RESPOSTA='{"total": 1, "trechos": [{"ordem": 1, "texto": "| Plano | Preço |", "secao": "Planos", "pagina_inicio": 2, "pagina_fim": 2, "tipo": "tabela"}]}'
+      ;;
+    *) API_RESPOSTA='[{"id": "d1", "nome": "catalogo.pdf", "status": "pronto", "total_trechos": 3, "erro": ""}]' ;;
+  esac
 }
 exige_api() { :; }
 pausa() { :; }
 
 # Remover um material, o primeiro da lista, e voltar.
-printf '%s\n' 6 1 7 >"$RESPOSTAS"
+printf '%s\n' 7 1 8 >"$RESPOSTAS"
 exec 3<"$RESPOSTAS"
 edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
 grep -qxF 'DELETE /admin/clientes/c1/agentes/a1/documentos/d1' "$TEMP_TESTE/chamadas" ||
@@ -39,7 +44,7 @@ echo 'ok: remover material da base chama a rota do documento escolhido'
 
 # Ler de novo o primeiro material e voltar.
 : >"$TEMP_TESTE/chamadas"
-printf '%s\n' 4 1 7 >"$RESPOSTAS"
+printf '%s\n' 5 1 8 >"$RESPOSTAS"
 exec 3<"$RESPOSTAS"
 edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
 grep -qxF 'POST /admin/clientes/c1/agentes/a1/documentos/d1/reprocessar' "$TEMP_TESTE/chamadas" ||
@@ -50,9 +55,20 @@ echo 'ok: ler de novo um material chama a rota do documento escolhido'
 
 # Ler de novo tudo e voltar.
 : >"$TEMP_TESTE/chamadas"
-printf '%s\n' 5 7 >"$RESPOSTAS"
+printf '%s\n' 6 8 >"$RESPOSTAS"
 exec 3<"$RESPOSTAS"
 edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
 grep -qxF 'POST /admin/clientes/c1/agentes/a1/documentos/reprocessar' "$TEMP_TESTE/chamadas" ||
   { echo 'FALHOU: ler de novo tudo não chamou a rota da base'; cat "$TEMP_TESTE/chamadas"; exit 1; }
 echo 'ok: ler de novo tudo chama a rota da base inteira'
+
+# Ver os trechos do primeiro material e voltar.
+: >"$TEMP_TESTE/chamadas"
+printf '%s\n' 4 1 8 >"$RESPOSTAS"
+exec 3<"$RESPOSTAS"
+edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
+grep -qxF 'GET /admin/clientes/c1/agentes/a1/documentos/d1/trechos?pagina=1' "$TEMP_TESTE/chamadas" ||
+  { echo 'FALHOU: ver trechos não chamou a rota do documento'; cat "$TEMP_TESTE/chamadas"; exit 1; }
+grep -q 'Planos  p. 2  tabela' "$TEMP_TESTE/saida" ||
+  { echo 'FALHOU: o trecho não apareceu com seção, página e tipo'; cat "$TEMP_TESTE/saida"; exit 1; }
+echo 'ok: ver trechos chama a rota do documento escolhido'

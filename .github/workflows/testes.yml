@@ -17,7 +17,8 @@ jobs:
         run: |
           uvx --from shellcheck-py shellcheck -x -P SCRIPTDIR \
             install.sh setup/instalar.sh setup/asimov.sh setup/lib/*.sh deploy/*.sh setup/testes/simula_retomada.sh setup/testes/caddy_real.sh setup/testes/simula_contexto.sh \
-            setup/testes/simula_desinstalar.sh setup/testes/simula_assinatura.sh setup/testes/simula_evolucao.sh
+            setup/testes/simula_desinstalar.sh setup/testes/simula_assinatura.sh setup/testes/simula_evolucao.sh \
+            setup/testes/simula_conhecimento.sh
       - name: Contexto na instalação e atualização
         run: bash setup/testes/simula_contexto.sh
       - name: Onboarding simulado
@@ -32,6 +33,8 @@ jobs:
         run: bash setup/testes/simula_assinatura.sh
       - name: Evolução de agente pelo assistente de código
         run: bash setup/testes/simula_evolucao.sh
+      - name: Base de conhecimento pelo terminal
+        run: bash setup/testes/simula_conhecimento.sh
       - name: Queda de conexão e reconexão real em tmux
         run: |
           sudo apt-get update

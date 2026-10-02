@@ -28,7 +28,7 @@ exige_api() { :; }
 pausa() { :; }
 
 # Remover um material, o primeiro da lista, e voltar.
-printf '%s\n' 5 1 6 >"$RESPOSTAS"
+printf '%s\n' 6 1 7 >"$RESPOSTAS"
 exec 3<"$RESPOSTAS"
 edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
 grep -qxF 'DELETE /admin/clientes/c1/agentes/a1/documentos/d1' "$TEMP_TESTE/chamadas" ||
@@ -39,7 +39,7 @@ echo 'ok: remover material da base chama a rota do documento escolhido'
 
 # Ler de novo o primeiro material e voltar.
 : >"$TEMP_TESTE/chamadas"
-printf '%s\n' 4 1 6 >"$RESPOSTAS"
+printf '%s\n' 4 1 7 >"$RESPOSTAS"
 exec 3<"$RESPOSTAS"
 edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
 grep -qxF 'POST /admin/clientes/c1/agentes/a1/documentos/d1/reprocessar' "$TEMP_TESTE/chamadas" ||
@@ -47,3 +47,12 @@ grep -qxF 'POST /admin/clientes/c1/agentes/a1/documentos/d1/reprocessar' "$TEMP_
 grep -q 'Ler de novo qual?' "$TEMP_TESTE/saida" ||
   { echo 'FALHOU: a pergunta de qual material ler de novo não apareceu'; exit 1; }
 echo 'ok: ler de novo um material chama a rota do documento escolhido'
+
+# Ler de novo tudo e voltar.
+: >"$TEMP_TESTE/chamadas"
+printf '%s\n' 5 7 >"$RESPOSTAS"
+exec 3<"$RESPOSTAS"
+edita_conhecimento >"$TEMP_TESTE/saida" 2>&1
+grep -qxF 'POST /admin/clientes/c1/agentes/a1/documentos/reprocessar' "$TEMP_TESTE/chamadas" ||
+  { echo 'FALHOU: ler de novo tudo não chamou a rota da base'; cat "$TEMP_TESTE/chamadas"; exit 1; }
+echo 'ok: ler de novo tudo chama a rota da base inteira'

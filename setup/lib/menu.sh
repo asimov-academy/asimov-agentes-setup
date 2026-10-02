@@ -461,11 +461,12 @@ edita_conhecimento() {
       dica "Ele ainda não sabe nada além do prompt."
     fi
 
-    ESC_ESCOLHE=6 escolha op "Base de conhecimento" \
+    ESC_ESCOLHE=7 escolha op "Base de conhecimento" \
       "Enviar um arquivo  ${CINZA}PDF, DOCX, TXT ou MD que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
       "Ler de novo um material  ${CINZA}relê o original guardado${NORMAL}" \
+      "Ler de novo tudo  ${CINZA}depois de trocar a chave de IA, por exemplo${NORMAL}" \
       "Remover um material" \
       "Voltar"
     case "$op" in
@@ -490,6 +491,9 @@ edita_conhecimento() {
         api POST "$caminho/$DOCUMENTO_ID/reprocessar"
         ;;
       5)
+        api POST "$caminho/reprocessar"
+        ;;
+      6)
         escolhe_documento "$documentos" || continue
         api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
@@ -655,7 +659,7 @@ mostra_consumo() {
       def soma(lista): {
         turnos: (lista | map(.turnos) | add // 0),
         tokens: (lista | map(.tokens_entrada + .tokens_saida) | add // 0),
-        custo: (lista | map(.custo_estimado | tonumber) | add // 0),
+        custo: (lista | map((.custo_estimado | tonumber) + ((.custo_base // 0) | tonumber)) | add // 0),
         sem_custo: (lista | map(.sem_custo) | add // 0)
       };
       def curto: if . >= 1000000 then "\(. / 100000 | floor / 10)M"

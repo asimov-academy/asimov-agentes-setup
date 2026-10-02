@@ -454,17 +454,18 @@ edita_conhecimento() {
     api GET "$caminho"
     exige_api
     documentos=$API_RESPOSTA
-    linhas=$(jq -r '.[] | "  \(.nome)  [\(.status)\(if .status == "pronto" then ", \(.total_trechos) trechos" else "" end)]\(if .erro != "" then "  " + .erro else "" end)"' <<<"$documentos")
+    linhas=$(jq -r '.[] | "  \(.nome)  [\(if .status == "reprocessando" then "lendo de novo" else .status end)\(if .status == "pronto" or .status == "reprocessando" then ", \(.total_trechos) trechos" else "" end)]\(if .erro != "" then "  " + .erro else "" end)\(if (.aviso // "") != "" then "  " + .aviso else "" end)"' <<<"$documentos")
     if [ -n "$linhas" ]; then
       printf '%s\n\n' "$linhas"
     else
       dica "Ele ainda não sabe nada além do prompt."
     fi
 
-    ESC_ESCOLHE=5 escolha op "Base de conhecimento" \
+    ESC_ESCOLHE=6 escolha op "Base de conhecimento" \
       "Enviar um arquivo  ${CINZA}PDF, DOCX, TXT ou MD que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
+      "Ler de novo um material  ${CINZA}relê o original guardado${NORMAL}" \
       "Remover um material" \
       "Voltar"
     case "$op" in
@@ -485,6 +486,10 @@ edita_conhecimento() {
         api POST "$caminho/site" "$(jq -n --arg u "$url" '{url: $u}')"
         ;;
       4)
+        escolhe_documento "$documentos" "Ler de novo qual?" || continue
+        api POST "$caminho/$DOCUMENTO_ID/reprocessar"
+        ;;
+      5)
         escolhe_documento "$documentos" || continue
         api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
@@ -508,7 +513,7 @@ escolhe_documento() {
   quantos=$(jq -r 'length' <<<"$1")
   [ "$quantos" -gt 0 ] || return 1
   while IFS= read -r linha; do nomes+=("$linha"); done < <(jq -r '.[] | .nome' <<<"$1")
-  ESC_ESCOLHE=$((quantos + 1)) escolha op "Remover qual?" "${nomes[@]}" "Voltar"
+  ESC_ESCOLHE=$((quantos + 1)) escolha op "${2:-Remover qual?}" "${nomes[@]}" "Voltar"
   [ "$op" -le "$quantos" ] || return 1
   DOCUMENTO_ID=$(jq -r --argjson i "$((op - 1))" '.[$i].id' <<<"$1")
 }

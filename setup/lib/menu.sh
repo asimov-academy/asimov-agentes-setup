@@ -448,7 +448,7 @@ edita_jeito() {
 # O material que o agente sabe além do prompt. O painel tem a mesma coisa na aba Treinamento, pelas
 # mesmas rotas: aqui o arquivo já está na VPS, e lá ele sobe pelo navegador.
 edita_conhecimento() {
-  local op caminho arquivo texto url documentos linhas
+  local op caminho arquivo texto url pergunta_teste documentos linhas
   while true; do
     caminho="$(caminho_do_agente "$AGENTE")/documentos"
     api GET "$caminho"
@@ -461,10 +461,11 @@ edita_conhecimento() {
       dica "Ele ainda não sabe nada além do prompt."
     fi
 
-    ESC_ESCOLHE=8 escolha op "Base de conhecimento" \
+    ESC_ESCOLHE=9 escolha op "Base de conhecimento" \
       "Enviar um arquivo  ${CINZA}PDF, DOCX, XLSX, CSV, TXT, MD, HTML ou foto que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
+      "Testar uma pergunta  ${CINZA}o que a busca acharia, sem gastar com resposta${NORMAL}" \
       "Ver trechos de um material  ${CINZA}o que a busca enxerga${NORMAL}" \
       "Ler de novo um material  ${CINZA}relê o original guardado${NORMAL}" \
       "Ler de novo tudo  ${CINZA}depois de trocar a chave de IA, por exemplo${NORMAL}" \
@@ -488,18 +489,29 @@ edita_conhecimento() {
         api POST "$caminho/site" "$(jq -n --arg u "$url" '{url: $u}')"
         ;;
       4)
+        pergunta pergunta_teste "Pergunte como um cliente"
+        api POST "$(caminho_do_agente "$AGENTE")/base/teste" "$(jq -n --arg p "$pergunta_teste" '{pergunta: $p}')"
+        if [ "$API_STATUS" = 200 ]; then
+          mostra_teste_da_base
+        else
+          printf '%s\n' "$(falha "$(detalhe_erro "$API_RESPOSTA")")"
+          pausa
+        fi
+        continue
+        ;;
+      5)
         escolhe_documento "$documentos" "Ver os trechos de qual?" || continue
         mostra_trechos "$caminho/$DOCUMENTO_ID"
         continue
         ;;
-      5)
+      6)
         escolhe_documento "$documentos" "Ler de novo qual?" || continue
         api POST "$caminho/$DOCUMENTO_ID/reprocessar"
         ;;
-      6)
+      7)
         api POST "$caminho/reprocessar"
         ;;
-      7)
+      8)
         escolhe_documento "$documentos" || continue
         api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
@@ -512,6 +524,20 @@ edita_conhecimento() {
     fi
     pausa
   done
+}
+
+# mostra_teste_da_base: o resultado de "Testar uma pergunta" (em API_RESPOSTA), em ordem, com o que
+# entrou na resposta e o que ficou de fora.
+mostra_teste_da_base() {
+  if [ "$(jq '.trechos | length' <<<"$API_RESPOSTA")" -eq 0 ]; then
+    dica "Nada na base sobre isso: o agente diria que não tem essa informação."
+    pausa
+    return 0
+  fi
+  jq -r --arg cinza "$CINZA" --arg normal "$NORMAL" --arg verde "$VERDE" '
+    .trechos[] |
+    "\(if .entrou then $verde + "entrou" else $cinza + (.motivo // "ficou de fora") end)\($normal)  \(.posicao)º  \(.documento)\(if .secao != "" then " > " + .secao else "" end)  \($cinza)por \(.via)\(if .distancia != null then ", distância \(.distancia * 100 | round / 100)" else "" end)\($normal)\n  \(.texto | gsub("\n"; " ") | .[0:200])\n"' <<<"$API_RESPOSTA"
+  pausa
 }
 
 # mostra_trechos CAMINHO_DO_DOCUMENTO: os primeiros trechos, como a busca enxerga, com seção e

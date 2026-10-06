@@ -148,6 +148,7 @@ docker() {
     *"pip install"*) mkdir -p "$(sed -n 's/.*-v \([^:]*\):.*/\1/p' <<<"$*")/venv" ;;
     *"pytest"*) if [ "$TESTES_PASSAM" = 1 ]; then echo '2 passed'; else echo '1 failed'; return 1; fi ;;
     "ps -a"*) printf 'asimov-ferramentas-99999999-0000-0000-0000-000000000000\n' ;;
+    *"UID_DO_CODIGO"*) printf '%s\n' "${EXECUTOR_TROCA_UID:-True}" ;;
     "rm -f"*) ;;
   esac
 }
@@ -218,3 +219,34 @@ mkdir -p "$TEMP_TESTE/fundo" && printf x >"$TEMP_TESTE/fundo/a.txt"
 if (fluxo_agente receber loja-exemplo/ana "$TEMP_TESTE/fundo/z5.zip") 2>"$TEMP_TESTE/erro" >/dev/null; then falhou 'ZIP aninhado sem fim aberto'; fi
 grep -q 'níveis' "$TEMP_TESTE/erro" || falhou 'aninhamento recusado sem motivo'
 echo 'ok: receber recusa ZIP que expande demais ou se aninha sem fim'
+
+# receber com arquivo roda sem aprovação: só o pacote entra, nunca o .env ou credencial.
+printf 'CHAVE_API_ADMIN=segredo\n' >"$RAIZ_PROJETO/.env"
+mkdir -p "$TEMP_TESTE/casa/.claude" && printf '{}' >"$TEMP_TESTE/casa/.claude/.credentials.json"
+cp "$TEMP_TESTE/pacote/files.zip" "$RAIZ_PROJETO/deploy/copia.zip"
+for proibido in "$RAIZ_PROJETO/.env" "$TEMP_TESTE/casa/.claude/.credentials.json" "$RAIZ_PROJETO/deploy/copia.zip" "$TEMP_TESTE/pacote"; do
+  if (HOME="$TEMP_TESTE/casa" fluxo_agente receber loja-exemplo/ana "$proibido") 2>/dev/null >/dev/null; then
+    falhou "receber aceitou $proibido"
+  fi
+done
+if grep -rq 'CHAVE_API_ADMIN' "$RAIZ_PROJETO/agentes"; then falhou 'o .env foi parar na área do assistente'; fi
+echo 'ok: receber com arquivo aceita só o pacote, nunca .env, credencial ou pasta da instalação'
+
+# Restaurar vale pelo efeito da versão de destino, não da ativa.
+FERRAMENTAS_ATIVAS='[{"nome":"consultar_agenda","contrato":{"efeito":"leitura"},"versoes":[{"numero":1,"efeito":"altera"},{"numero":2,"efeito":"leitura"}]}]'
+if ! { : </dev/tty; } 2>/dev/null; then
+  if (fluxo_ferramenta restaurar loja-exemplo/ana consultar_agenda 1) 2>/dev/null >/dev/null; then
+    falhou 'restaurou a versão que altera porque a ativa só lê'
+  fi
+  echo 'ok: restaurar confere o efeito da versão de destino'
+fi
+
+# Testes da ferramenta rodam com o uid do atendimento.
+grep 'pytest' "$TEMP_TESTE/docker" | grep -q -- '--user 1001:1001' || falhou 'testes da ferramenta não rodam com o uid do atendimento'
+echo 'ok: testes da ferramenta com o uid 1001'
+
+# Imagem antiga (volta de versão): o contêiner da empresa não ganha root nem capacidade.
+EXECUTOR_TROCA_UID=False ferramentas_gera_compose 11111111-2222-3333-4444-555555555555
+grep -q 'user: "1000:1000"' "$compose" || falhou 'imagem antiga ganhou outro usuário'
+if grep -q 'cap_add\|FERRAMENTAS_UID_DO_CODIGO' "$compose"; then falhou 'imagem antiga ganhou capacidades'; fi
+echo 'ok: executor antigo continua com o uid 1000 e sem capacidade'

@@ -40,6 +40,11 @@ ${esquema}://$sub {
 	}
 	redir / /painel 302
 	handle {
+		# O FastAPI lê o multipart antes de conferir a sessão: sem teto aqui, quem não entrou
+		# enche o disco. O maior envio do painel é material de 20 MB.
+		request_body {
+			max_size 25MiB
+		}
 		reverse_proxy painel:8000
 	}
 }

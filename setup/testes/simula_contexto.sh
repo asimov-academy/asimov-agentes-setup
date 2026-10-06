@@ -84,15 +84,18 @@ gera_arquivos_de_contexto
 jq -e '.model == "opus" and .permissions.allow == ["Bash(ls:*)"] and .permissions.ask == []' \
   "$RAIZ_PROJETO/.claude/settings.json" >/dev/null
 area="$RAIZ_PROJETO/agentes"
-grep -q 'pattern = \["asimov","agente"\], decision = "allow"' "$area/.codex/rules/asimov.rules"
+grep -q 'pattern = \["asimov","agente","listar"\], decision = "allow"' "$area/.codex/rules/asimov.rules"
+# Prefixo amplo liberado deixava passar o subcomando que pede aprovação escrito de outro jeito.
+if grep -q 'pattern = \["asimov","agente"\], decision = "allow"' "$area/.codex/rules/asimov.rules"; then exit 1; fi
 for prefixo in '"agente","prompt","aplicar"' '"agente","conversa"' '"ferramenta","ligar"' '"ferramenta","restaurar"' '"ferramenta","ativar"'; do
   grep -q "pattern = \[\"asimov\",$prefixo\], decision = \"prompt\"" "$area/.codex/rules/asimov.rules" ||
     { echo "sem aprovação: $prefixo"; exit 1; }
 done
 jq -e --arg env "Read(/$RAIZ_PROJETO/.env)" --arg setup "Edit(/$RAIZ_PROJETO/setup/**)" '
-  (.permissions.allow | index("Bash(asimov agente:*)")) and (.permissions.ask | index("Bash(asimov agente conversa:*)"))
+  (.permissions.allow | index("Bash(asimov agente listar:*)")) and (.permissions.allow | index("Bash(asimov agente:*)") | not)
+  and (.permissions.ask | index("Bash(asimov agente conversa:*)"))
   and (.permissions.deny | index($env)) and (.permissions.deny | index($setup)) and (.permissions.deny | index("Edit(/.claude/**)"))
-  and ([.permissions.allow[] | select(. == "Bash(asimov agente:*)")] | length == 1)' "$area/.claude/settings.json" >/dev/null
+  and ([.permissions.allow[] | select(. == "Bash(asimov agente listar:*)")] | length == 1)' "$area/.claude/settings.json" >/dev/null
 [ "$(cat "$area/CLAUDE.md")" = '@AGENTS.md' ]
 [ -f "$area/.codex/config.toml" ]
 [ "$(stat -c %a "$area" 2>/dev/null || stat -f %Lp "$area")" = 700 ]

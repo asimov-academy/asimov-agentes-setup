@@ -25,7 +25,7 @@ de novo lá, ou para aprovar o comando.
 3. Leia `evolucao.md` e `decisoes.md` dessa pasta. Se já houver fase registrada, continue dela:
    não repita pergunta respondida nem refaça etapa concluída.
 4. O pacote. Se o operador disse onde o arquivo está na VPS:
-   `asimov agente receber <ref> <arquivo ou pasta>`. Se ainda não está na VPS (o normal), rode
+   `asimov agente receber <ref> <arquivo>` (só o pacote: ZIP e documentos da análise). Se ainda não está na VPS (o normal), rode
    `asimov agente envio <ref>` e passe o link ao operador: "abra no navegador, escolha o ZIP da
    análise e toque em Enviar". Depois `asimov agente receber <ref> --esperar 110`; se ainda não
    chegou, rode de novo. Não peça SFTP, `scp` nem caminho de pasta. O receber guarda o original em

@@ -33,7 +33,21 @@ gera_arquivos_de_contexto() {
 # editar `setup/lib` e rodar `asimov` sem aprovação rodaria o que quisesse como root.
 AREA_DO_ASSISTENTE="$RAIZ_PROJETO/agentes"
 CABECALHO_REGRAS="# Gerado pelo instalador do Asimov Agentes: asimov atualizar reescreve este arquivo."
-COMANDOS_LIBERADOS=("asimov agente" "asimov ferramenta" "asimov agentes" "asimov diagnostico")
+# Subcomando por subcomando: liberar o prefixo `asimov agente` e pedir aprovação só para `prompt
+# aplicar` deixava passar `asimov agente 'prompt' aplicar` no Claude Code, que compara texto. O que
+# não está aqui cai no padrão do CLI, que é perguntar.
+COMANDOS_LIBERADOS=(
+  "asimov agente listar" "asimov agente contexto" "asimov agente preparar" "asimov agente envio"
+  "asimov agente receber" "asimov agente ajuda" "asimov agente prompt ver" "asimov agente prompt historico"
+  "asimov agente prompt versao" "asimov ferramenta listar" "asimov ferramenta testar"
+  "asimov ferramenta desligar" "asimov ferramenta execucoes" "asimov ferramenta diagnostico"
+  "asimov ferramenta ajuda" "asimov agentes" "asimov diagnostico"
+)
+# O que versões até a v0.37 gravavam: sai da raiz e da área na atualização.
+REGRAS_ANTIGAS_DO_CLAUDE=(
+  "Bash(asimov agente:*)" "Bash(asimov ferramenta:*)" "Bash(asimov agentes:*)" "Bash(asimov diagnostico:*)"
+  "Bash(asimov ferramenta ativar:*)" "Bash(asimov ferramenta segredo:*)" "Bash(asimov ferramenta executar:*)"
+)
 # Mudam o atendimento ou um sistema de fora: o operador aprova cada um.
 COMANDOS_COM_APROVACAO=(
   "asimov agente prompt aplicar" "asimov agente prompt restaurar" "asimov agente conversa"
@@ -71,13 +85,17 @@ garante_permissoes_dos_assistentes() {
     apt_instala bubblewrap >>"$LOG" 2>&1 || true
   fi
   if [ -s "$settings" ] && jq -e . "$settings" >/dev/null 2>&1; then
-    limpo=$(jq --argjson nossos "$(_regras_do_claude | jq -c '.permissions.allow + .permissions.ask')" '
+    limpo=$(jq --argjson nossos "$(_regras_nossas_e_antigas)" '
       if .permissions then
         .permissions.allow = ((.permissions.allow // []) - $nossos)
         | .permissions.ask = ((.permissions.ask // []) - $nossos)
       else . end' "$settings") && printf '%s\n' "$limpo" >"$settings"
   fi
   garante_area_do_assistente
+}
+
+_regras_nossas_e_antigas() {
+  _regras_do_claude | jq -c --args '.permissions.allow + .permissions.ask + $ARGS.positional' "${REGRAS_ANTIGAS_DO_CLAUDE[@]}"
 }
 
 # _regras_do_claude: allow, ask e deny do `.claude/settings.json` da área. Caminho com `//` é absoluto.
@@ -125,8 +143,8 @@ garante_area_do_assistente() {
       return 0
     fi
   fi
-  jq --argjson nossas "$(_regras_do_claude)" '
-    .permissions.allow = ((.permissions.allow // []) + $nossas.permissions.allow | unique)
+  jq --argjson nossas "$(_regras_do_claude)" --argjson antigas "$(_regras_nossas_e_antigas)" '
+    .permissions.allow = ((.permissions.allow // []) - $antigas + $nossas.permissions.allow | unique)
     | .permissions.ask = ((.permissions.ask // []) + $nossas.permissions.ask | unique)
     | .permissions.deny = ((.permissions.deny // []) + $nossas.permissions.deny | unique)' <<<"$atual" >"$settings.tmp" &&
     mv "$settings.tmp" "$settings"

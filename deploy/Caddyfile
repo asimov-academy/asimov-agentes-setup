@@ -11,8 +11,16 @@
 	# Só webhooks, health e o que a Meta exige para publicar o app (a URL da política de
 	# privacidade e o ícone) ficam públicos, mais o link de envio de arquivos (uso único, 30 min).
 	# /admin responde apenas em 127.0.0.1:8000.
-	@publico path /health /webhook/* /privacidade* /icone-app.png /envio/*
+	@publico path /health /webhook/* /privacidade* /icone-app.png
 	handle @publico {
+		reverse_proxy api:8000
+	}
+	# O link de envio é a única rota pública que recebe arquivo: o teto fica aqui também, antes de
+	# o corpo chegar à API.
+	handle /envio/* {
+		request_body {
+			max_size 51MiB
+		}
 		reverse_proxy api:8000
 	}
 	handle {

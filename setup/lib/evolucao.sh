@@ -119,6 +119,28 @@ ev_envio() {
   printf 'Abra no navegador, escolha o ZIP da análise e toque em Enviar. Depois: asimov agente receber %s --esperar 110\n' "${1:-}"
 }
 
+# ev_confere_pacote ARQUIVO: `receber` roda sem aprovação, então arquivo apontado pelo assistente só
+# entra se for o pacote da análise. Sem isto, `receber <ref> ../.env` copiava o .env (ou a credencial
+# do CLI) para a pasta em que ele lê à vontade.
+ev_confere_pacote() {
+  local item=$1 real nome raiz casa
+  [ -f "$item" ] && [ ! -L "$item" ] || ev_erro "não achei o arquivo $item (pasta e link não entram: mande o ZIP)"
+  real=$(cd "$(dirname "$item")" && pwd -P)/$(basename "$item")
+  raiz=$(cd "$RAIZ_PROJETO" && pwd -P)
+  casa=$(cd "$HOME" 2>/dev/null && pwd -P || printf '%s' "$HOME")
+  nome=$(basename "$real")
+  case "$nome" in
+    .*) ev_erro "arquivo oculto não entra no pacote: $item" ;;
+    *.zip | *.md | *.yaml | *.yml | *.json | *.html | *.htm | *.txt | *.csv | *.pdf) ;;
+    *) ev_erro "$item não é do pacote da análise (ZIP, Markdown, YAML, JSON, HTML, TXT, CSV ou PDF)" ;;
+  esac
+  case "$real" in
+    "$raiz"/agentes/*) ;;
+    "$raiz"/* | "$casa"/.* | /etc/* | /root/.* | /var/lib/asimov/* | /proc/* | /sys/*)
+      ev_erro "$item fica numa pasta da instalação ou do sistema; mande pelo link: asimov agente envio" ;;
+  esac
+}
+
 # asimov agente receber REF [--esperar SEGUNDOS] [ARQUIVO...]: guarda o pacote original na pasta do
 # agente e abre os ZIPs, inclusive os de dentro. Sem arquivo, pega o que chegou pelo link de envio.
 ev_receber() {
@@ -132,7 +154,7 @@ ev_receber() {
   fi
   arquivos=("$@")
   for item in "${arquivos[@]}"; do
-    [ -e "$item" ] || ev_erro "não achei $item"
+    ev_confere_pacote "$item"
   done
   ev_preparar "$ref" >/dev/null
   if [ "${#arquivos[@]}" -eq 0 ]; then
@@ -154,10 +176,12 @@ ev_receber() {
   fi
   destino="$(ev_pasta)/recebido/$(date '+%Y%m%d-%H%M%S')"
   mkdir -p "$destino/original" "$destino/aberto"
+  # Só o que chegou pelo link passa pelo sudo; arquivo apontado pelo assistente é lido como quem
+  # roda o comando, e já passou por ev_confere_pacote.
   for item in "${arquivos[@]}"; do
-    $SUDO cp -R "$item" "$destino/original/"
+    if [ "${#envios[@]}" -gt 0 ]; then $SUDO cp -R "$item" "$destino/original/"; else cp "$item" "$destino/original/"; fi
   done
-  [ -z "$SUDO" ] || $SUDO chown -R "$(id -u):$(id -g)" "$destino/original"
+  [ -z "$SUDO" ] || [ "${#envios[@]}" -eq 0 ] || $SUDO chown -R "$(id -u):$(id -g)" "$destino/original"
   cp -R "$destino/original/." "$destino/aberto/"
   # O zipfile do Python recusa caminho absoluto e `..` ao extrair. Repete enquanto houver ZIP novo
   # (o pacote da análise costuma vir dentro de outro), com teto: o ZIP chega por link público, e um

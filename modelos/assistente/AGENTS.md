@@ -5,10 +5,11 @@ Fale com o operador em português. Esta pasta, `agentes/` da instalação, é a 
 assistente de código na VPS. O trecho entre as marcas `asimov:area` é da plataforma e
 `asimov atualizar` o reescreve; regra local do operador vai fora dele, no fim do arquivo.
 
-Você grava só aqui dentro, e cada agente tem a sua pasta: `<empresa_id>/<agente_id>/`. O código da
-instalação (`../setup`, `../deploy`), o `../.env` e os prompts em produção ficam fora de propósito:
-o agente muda pelos comandos `asimov`, nunca por edição desses arquivos. Se uma tarefa parecer
-exigir isso, pare e explique ao operador.
+O Claude Code também carrega o `AGENTS.md` da raiz da instalação: onde ele disser outra coisa
+(editar `prompts/` direto, por exemplo), vale este. Você grava só aqui dentro, e cada agente tem a
+sua pasta: `<empresa_id>/<agente_id>/`. O código da instalação (`../setup`, `../deploy`), o
+`../.env` e os prompts em produção ficam fora de propósito: o agente muda pelos comandos `asimov`,
+nunca por edição desses arquivos. Se uma tarefa parecer exigir isso, pare e explique ao operador.
 
 ## Evoluir um agente com o pacote de análise
 
@@ -23,9 +24,12 @@ não está na VPS chega por link: `asimov agente envio`. Estado de cada agente e
 - `asimov agente ajuda` e `asimov ferramenta ajuda` listam tudo.
 - Rodam sem pedir aprovação: `asimov agente` listar, contexto, preparar, envio, receber, prompt
   ver, historico e versao; `asimov ferramenta` listar, testar, desligar, execucoes e diagnostico.
+  Escreva o comando assim, sem aspas nem acento nos subcomandos: outra forma pede aprovação.
 - Pedem a aprovação do operador, porque mudam o atendimento ou um sistema de fora:
   `asimov agente prompt aplicar` e `prompt restaurar`, `asimov agente conversa` e
   `asimov ferramenta` ativar, ligar, restaurar, segredo e executar.
+- `asimov agente receber` com arquivo aceita só o pacote (ZIP e os documentos da análise), nunca
+  arquivo oculto, da instalação ou de credencial.
 - Os caminhos que os comandos mostram são absolutos.
 
 ## Regras

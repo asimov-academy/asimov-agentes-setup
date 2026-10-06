@@ -137,6 +137,9 @@ services:
       ANTHROPIC_AUTH_TOKEN: ""
       OPENAI_API_KEY: ""
       CODEX_API_KEY: ""
+      GEMINI_API_KEY: ""
+      GROQ_API_KEY: ""
+      OPENROUTER_API_KEY: ""
     # Com o dono da credencial, não com o usuário da imagem: o login do operador é 600 do dono
     # dele (root, em quase toda VPS), e outro uid não conseguiria nem abrir o arquivo.
     user: "${CREDENCIAL_IA_UID:-1000}:${CREDENCIAL_IA_GID:-1000}"

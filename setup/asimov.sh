@@ -58,11 +58,13 @@ case "${1:-menu}" in
     # Sem com_voltar: é comando para o assistente de código, sem tela e sem Esc.
     exige_instalacao
     shift
+    confere_area_do_assistente
     fluxo_agente "$@"
     ;;
   ferramenta)
     exige_instalacao
     shift
+    confere_area_do_assistente
     fluxo_ferramenta "$@"
     ;;
   diagnostico | diagnóstico) roda fluxo_diagnostico ;;

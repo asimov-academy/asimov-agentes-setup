@@ -116,7 +116,7 @@ _regras_do_claude() {
 # Codex só carrega `.codex/rules` de pasta em que o operador confiou, e mantém `.codex` só de
 # leitura dentro do sandbox.
 garante_area_do_assistente() {
-  local area=$AREA_DO_ASSISTENTE settings="$AREA_DO_ASSISTENTE/.claude/settings.json" atual comando prefixo
+  local area=$AREA_DO_ASSISTENTE comando prefixo
   mkdir -p "$area/.codex/rules" "$area/.claude"
   chmod 700 "$area"
   substitui_bloco "$area/AGENTS.md" asimov:area "$RAIZ_PROJETO/modelos/assistente/AGENTS.md" || return 1
@@ -135,19 +135,26 @@ garante_area_do_assistente() {
       printf 'prefix_rule(pattern = %s, decision = "prompt", justification = "muda o atendimento: o operador aprova")\n' "$prefixo"
     done
   } >"$area/.codex/rules/asimov.rules"
-  atual='{}'
-  if [ -s "$settings" ]; then
-    if ! atual=$(jq -c . "$settings" 2>/dev/null); then
-      # Nunca troca o arquivo do operador por um só com as regras do Asimov.
-      printf 'agentes/.claude/settings.json não é JSON válido; permissões do Claude Code não gravadas\n' >>"$LOG"
-      return 0
+  confere_area_do_assistente
+}
+
+# confere_area_do_assistente: o `.claude/` da área é da plataforma. O Codex grava em `agentes/` (só o
+# `.codex/` fica protegido no sandbox dele), e um `settings.json` plantado ali valeria na próxima
+# sessão do Claude Code: regra `allow` ampla ou `hooks`, que rodam sozinhos ao abrir. Todo
+# `asimov agente` e `asimov ferramenta` confere e devolve o arquivo ao da instalação.
+confere_area_do_assistente() {
+  local claude="$AREA_DO_ASSISTENTE/.claude" esperado
+  [ -d "$AREA_DO_ASSISTENTE" ] || return 0
+  mkdir -p "$claude"
+  esperado=$(_regras_do_claude | jq -S .)
+  if [ -e "$claude/settings.local.json" ] || [ "$(jq -S . "$claude/settings.json" 2>/dev/null || true)" != "$esperado" ]; then
+    if [ -e "$claude/settings.json" ] || [ -e "$claude/settings.local.json" ]; then
+      printf 'aviso: as configurações do Claude Code em %s foram mudadas por fora; voltaram às da instalação\n' "$claude" >&2
+      printf '%s agentes/.claude restaurado\n' "$(date -Is)" >>"${LOG:-/dev/null}"
     fi
+    rm -f "$claude/settings.local.json"
+    printf '%s\n' "$esperado" >"$claude/settings.json.tmp" && mv "$claude/settings.json.tmp" "$claude/settings.json"
   fi
-  jq --argjson nossas "$(_regras_do_claude)" --argjson antigas "$(_regras_nossas_e_antigas)" '
-    .permissions.allow = ((.permissions.allow // []) - $antigas + $nossas.permissions.allow | unique)
-    | .permissions.ask = ((.permissions.ask // []) + $nossas.permissions.ask | unique)
-    | .permissions.deny = ((.permissions.deny // []) + $nossas.permissions.deny | unique)' <<<"$atual" >"$settings.tmp" &&
-    mv "$settings.tmp" "$settings"
 }
 
 # garante_contexto_de_evolucao: o AGENTS.md da raiz (do operador; o instalador nunca o troca inteiro)

@@ -239,4 +239,6 @@ assistente pede aprovação para todos: é de propósito, porque ali ele poderia
 código que esses comandos executam como root.
 
 `asimov atualizar` recupera arquivos ausentes e reescreve só os trechos da plataforma,
-sem trocar o que você escreveu fora deles.
+sem trocar o que você escreveu fora deles. O `agentes/.claude/` é todo da plataforma: todo
+comando `asimov agente` ou `asimov ferramenta` devolve ele ao da instalação, porque o Codex
+grava nessa pasta e uma regra plantada ali valeria na próxima sessão do Claude Code.

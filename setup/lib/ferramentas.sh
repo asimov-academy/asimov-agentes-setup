@@ -60,8 +60,9 @@ ferramentas_gera_compose() {
     return 0
   fi
   # O executor é root do grupo 1000 só com as capacidades de trocar de usuário e de cuidar da pasta
-  # de trabalho; o código da ferramenta roda como 1001, sem capacidade nenhuma, e não enxerga /sock
-  # (750 do uid 1000): não troca o executor.sock nem vê segredo de outro agente.
+  # de trabalho; o código de cada agente roda com um uid próprio (a partir de 1001), sem capacidade
+  # nenhuma, e não enxerga /sock (750 do uid 1000): não troca o executor.sock nem vê segredo de
+  # outro agente.
   if executor_troca_uid; then
     usuario='"0:1000"'
     capacidades=$'\n    cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID, KILL]'

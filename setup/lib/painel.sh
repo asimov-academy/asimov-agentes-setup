@@ -40,6 +40,11 @@ ${esquema}://$sub {
 	}
 	redir / /painel 302
 	handle {
+		# O FastAPI lê o multipart antes de conferir a sessão: sem teto aqui, quem não entrou
+		# enche o disco. O maior envio do painel é material de 20 MB.
+		request_body {
+			max_size 25MiB
+		}
 		reverse_proxy painel:8000
 	}
 }
@@ -205,6 +210,9 @@ painel_liga() {
     ok "Painel no ar em $(destaque "https://$sub")"
   else
     aviso "O painel subiu, mas o endereço ainda não respondeu. O certificado pode levar um minuto."
+    # Endereço que some do Caddy da VPS é o motivo mais comum: oferece refazer, sem mexer em nada
+    # antes de o operador confirmar.
+    repara_caddy_host || true
   fi
   painel_mostra_codigo
 }

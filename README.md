@@ -221,11 +221,24 @@ Testes adicionais: `bash setup/testes/simula_retomada.sh`,
 
 ## Contexto para evoluir os agentes
 
-Desde a v0.33.2, a instalação cria `AGENTS.md` e `CLAUDE.md` na pasta do projeto.
-`asimov atualizar` recupera arquivos ausentes em instalações anteriores, sem trocar
-arquivos personalizados. Depois, abra uma nova sessão do assistente nessa pasta.
+A instalação cria `AGENTS.md` e `CLAUDE.md` na pasta do projeto, para o operador
+manter a VPS com o assistente, e uma área de trabalho em `agentes/` para evoluir os
+agentes:
 
-O contexto orienta a edição de `prompts/<empresa>/<agente>/persona.md` e do resumo
-de handoff, os comandos disponíveis e a preservação de dados e serviços da VPS.
-Esta distribuição usa imagens prontas: desenvolver ferramentas ou alterar o código
-da plataforma exige o repositório de desenvolvimento e a publicação de uma imagem.
+```bash
+cd ~/asimov-agentes/agentes && claude
+```
+
+Troque `claude` por `codex`. Na primeira vez, o Codex pergunta se confia na pasta:
+confirme, senão cada comando `asimov` pede aprovação. Em `agentes/` o assistente grava
+só ali dentro, longe de `setup/`, `deploy/` e do `.env`, e os comandos de leitura e de
+preparo (`asimov agente`, `asimov ferramenta`) rodam sem aprovação. Os que mudam o
+atendimento (aplicar ou restaurar prompt, conversa de teste, ativar, ligar, restaurar,
+segredo e executar ferramenta) pedem a sua aprovação a cada vez. Aberto na raiz, o
+assistente pede aprovação para todos: é de propósito, porque ali ele poderia editar o
+código que esses comandos executam como root.
+
+`asimov atualizar` recupera arquivos ausentes e reescreve só os trechos da plataforma,
+sem trocar o que você escreveu fora deles. O `agentes/.claude/` é todo da plataforma: todo
+comando `asimov agente` ou `asimov ferramenta` devolve ele ao da instalação, porque o Codex
+grava nessa pasta e uma regra plantada ali valeria na próxima sessão do Claude Code.

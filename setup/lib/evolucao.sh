@@ -2,6 +2,7 @@
 # `asimov agente`: comandos que o assistente de código (Claude Code ou Codex) usa para evoluir um
 # agente a partir do pacote de análise (modelos/guias/evolucao-de-agente.md). Tudo pela API; a pasta
 # privada do agente fica em agentes/<empresa_id>/<agente_id>/, com ids que não mudam ao renomear.
+# O assistente trabalha de dentro de agentes/ (final.sh): todo caminho mostrado é absoluto.
 #
 # Saída pensada para quem lê é uma IA: texto curto ou JSON, erro no stderr e código de saída 1.
 
@@ -16,7 +17,7 @@ ev_erro() {
 ev_api() {
   api "$@"
   if [ "$API_STATUS" = 000 ]; then
-    ev_erro "a API local não respondeu em $API_LOCAL. Se você é o Codex ou o Claude Code, o comando rodou no sandbox sem rede: rode de novo fora do sandbox (peça a aprovação do operador). Se não, veja: source deploy/compose.sh && dc logs api"
+    ev_erro "a API local não respondeu em $API_LOCAL. Se você é o Codex ou o Claude Code, o comando rodou no sandbox sem rede: rode de novo fora do sandbox (peça a aprovação do operador). Se não, veja: cd $RAIZ_PROJETO && source deploy/compose.sh && dc logs api"
   fi
 }
 
@@ -70,7 +71,10 @@ ev_contexto() {
   ev_resolve "${1:-}"
   ev_api GET "$(ev_caminho)/contexto"
   [ "$API_STATUS" = 200 ] || ev_erro "$(detalhe_erro "$API_RESPOSTA")"
-  jq . <<<"$API_RESPOSTA"
+  # A API devolve caminhos relativos à raiz da instalação; o assistente está em agentes/.
+  jq --arg raiz "$RAIZ_PROJETO" --arg pasta "$(ev_pasta)" '
+    .pasta_de_evolucao = $pasta
+    | if .prompt.arquivo then .prompt.arquivo = ($raiz + "/" + .prompt.arquivo) else . end' <<<"$API_RESPOSTA"
 }
 
 # ev_leiame: o LEIAME.md da pasta, reescrito a cada preparar (nome e empresa podem ter mudado).
@@ -84,7 +88,7 @@ Atualizado por \`asimov agente preparar\` em $(date '+%Y-%m-%d %H:%M').
 
 - Agente: $EV_AGENTE
 - Empresa: $EV_CLIENTE
-- Guia: modelos/guias/evolucao-de-agente.md
+- Guia: $RAIZ_PROJETO/modelos/guias/evolucao-de-agente.md
 - Estado do trabalho: evolucao.md · decisões: decisoes.md
 - Pacotes recebidos: recebido/ · prompt adaptado: prompt/ · ferramentas: ferramentas/ · testes: testes/
 EOF
@@ -101,7 +105,7 @@ ev_preparar() {
     [ -e "$pasta/$modelo.md" ] || cp "$RAIZ_PROJETO/modelos/agente/$modelo.md" "$pasta/$modelo.md"
   done
   ev_leiame "$pasta"
-  printf '%s\n' "${pasta#"$RAIZ_PROJETO"/}"
+  printf '%s\n' "$pasta"
 }
 
 # asimov agente receber REF ARQUIVO...: guarda o original e abre os ZIPs, inclusive os de dentro.
@@ -113,6 +117,28 @@ ev_envio() {
   printf 'Link de envio para %s (%s), vale %s minutos e uma vez só:\n\n  %s\n\n' "$EV_NOME" "$EV_EMPRESA" \
     "$(jq -r '.validade_minutos' <<<"$API_RESPOSTA")" "$(jq -r '.url' <<<"$API_RESPOSTA")"
   printf 'Abra no navegador, escolha o ZIP da análise e toque em Enviar. Depois: asimov agente receber %s --esperar 110\n' "${1:-}"
+}
+
+# ev_confere_pacote ARQUIVO: `receber` roda sem aprovação, então arquivo apontado pelo assistente só
+# entra se for o pacote da análise. Sem isto, `receber <ref> ../.env` copiava o .env (ou a credencial
+# do CLI) para a pasta em que ele lê à vontade.
+ev_confere_pacote() {
+  local item=$1 real nome raiz casa
+  [ -f "$item" ] && [ ! -L "$item" ] || ev_erro "não achei o arquivo $item (pasta e link não entram: mande o ZIP)"
+  real=$(cd "$(dirname "$item")" && pwd -P)/$(basename "$item")
+  raiz=$(cd "$RAIZ_PROJETO" && pwd -P)
+  casa=$(cd "$HOME" 2>/dev/null && pwd -P || printf '%s' "$HOME")
+  nome=$(basename "$real")
+  case "$nome" in
+    .*) ev_erro "arquivo oculto não entra no pacote: $item" ;;
+    *.zip | *.md | *.yaml | *.yml | *.json | *.html | *.htm | *.txt | *.csv | *.pdf) ;;
+    *) ev_erro "$item não é do pacote da análise (ZIP, Markdown, YAML, JSON, HTML, TXT, CSV ou PDF)" ;;
+  esac
+  case "$real" in
+    "$raiz"/agentes/*) ;;
+    "$raiz"/* | "$casa"/.* | /etc/* | /root/.* | /var/lib/asimov/* | /proc/* | /sys/*)
+      ev_erro "$item fica numa pasta da instalação ou do sistema; mande pelo link: asimov agente envio" ;;
+  esac
 }
 
 # asimov agente receber REF [--esperar SEGUNDOS] [ARQUIVO...]: guarda o pacote original na pasta do
@@ -128,51 +154,67 @@ ev_receber() {
   fi
   arquivos=("$@")
   for item in "${arquivos[@]}"; do
-    [ -e "$item" ] || ev_erro "não achei $item"
+    ev_confere_pacote "$item"
   done
   ev_preparar "$ref" >/dev/null
   if [ "${#arquivos[@]}" -eq 0 ]; then
     chegada="$PASTA_ENVIOS/$EV_CLIENTE/$EV_AGENTE"
+    # A chegada é do uid 1000 (a API), com 750: operador que não é root só enxerga pelo sudo.
     while :; do
       envios=()
-      for pasta in "$chegada"/*/; do
-        [ -d "$pasta" ] || continue
-        case "$pasta" in *.parcial/) continue ;; esac
-        envios+=("${pasta%/}")
-      done
+      while IFS= read -r -d '' pasta; do envios+=("$pasta"); done < <(
+        $SUDO find "$chegada" -mindepth 1 -maxdepth 1 -type d ! -name '*.parcial' -print0 2>/dev/null | sort -z
+      )
       [ "${#envios[@]}" -eq 0 ] || break
       [ "$espera" -gt 0 ] || ev_erro "nada chegou pelo link ainda. Gere um com: asimov agente envio $ref"
       sleep 3
       espera=$((espera > 3 ? espera - 3 : 0))
     done
     for pasta in "${envios[@]}"; do
-      for item in "$pasta"/*; do [ -e "$item" ] && arquivos+=("$item"); done
+      while IFS= read -r -d '' item; do arquivos+=("$item"); done < <($SUDO find "$pasta" -mindepth 1 -maxdepth 1 -print0)
     done
   fi
   destino="$(ev_pasta)/recebido/$(date '+%Y%m%d-%H%M%S')"
   mkdir -p "$destino/original" "$destino/aberto"
+  # Só o que chegou pelo link passa pelo sudo; arquivo apontado pelo assistente é lido como quem
+  # roda o comando, e já passou por ev_confere_pacote.
   for item in "${arquivos[@]}"; do
-    cp -R "$item" "$destino/original/"
+    if [ "${#envios[@]}" -gt 0 ]; then $SUDO cp -R "$item" "$destino/original/"; else cp "$item" "$destino/original/"; fi
   done
+  [ -z "$SUDO" ] || [ "${#envios[@]}" -eq 0 ] || $SUDO chown -R "$(id -u):$(id -g)" "$destino/original"
   cp -R "$destino/original/." "$destino/aberto/"
-  # O zipfile do Python recusa caminho absoluto e `..` ao extrair. Repete enquanto houver ZIP novo:
-  # o pacote da análise costuma vir dentro de outro.
-  python3 - "$destino/aberto" <<'PY' || ev_erro "não consegui abrir um dos ZIPs"
+  # O zipfile do Python recusa caminho absoluto e `..` ao extrair. Repete enquanto houver ZIP novo
+  # (o pacote da análise costuma vir dentro de outro), com teto: o ZIP chega por link público, e um
+  # que se contém ou que expande para gigabytes enchia o disco da VPS.
+  local motivo
+  if ! motivo=$(
+    python3 - "$destino/aberto" 2>&1 <<'PY'
 import pathlib, sys, zipfile
+LIMITE_BYTES, LIMITE_ARQUIVOS, NIVEIS = 500 * 1024 * 1024, 5000, 3
 raiz = pathlib.Path(sys.argv[1])
-abertos = set()
-while True:
+abertos, total, arquivos = set(), 0, 0
+for nivel in range(NIVEIS + 1):
     novos = [z for z in raiz.rglob("*.zip") if z not in abertos]
     if not novos:
         break
+    if nivel == NIVEIS:
+        sys.exit(f"ZIP dentro de ZIP com mais de {NIVEIS} níveis")
     for z in novos:
         abertos.add(z)
-        alvo = z.with_suffix("")
         with zipfile.ZipFile(z) as arquivo:
-            arquivo.extractall(alvo)
+            membros = arquivo.infolist()
+            arquivos += len(membros)
+            total += sum(m.file_size for m in membros)
+            if arquivos > LIMITE_ARQUIVOS or total > LIMITE_BYTES:
+                sys.exit("o pacote aberto passaria de 500 MB ou 5000 arquivos")
+            arquivo.extractall(z.with_suffix(""))
 PY
+  ); then
+    rm -rf "$destino"
+    ev_erro "não consegui abrir os ZIPs: ${motivo:0:300}"
+  fi
   for pasta in "${envios[@]}"; do $SUDO rm -rf "$pasta"; done
-  printf '%s\n' "${destino#"$RAIZ_PROJETO"/}"
+  printf '%s\n' "$destino"
   (cd "$destino/aberto" && find . -type f ! -name '*.zip' | sed 's#^\./#  #' | sort)
 }
 
@@ -261,8 +303,9 @@ ev_conversa() {
 }
 
 ev_ajuda() {
+  printf 'asimov agente: evoluir um agente a partir do pacote de análise (guia: %s)\n' \
+    "$RAIZ_PROJETO/modelos/guias/evolucao-de-agente.md"
   cat <<'EOF'
-asimov agente: evoluir um agente a partir do pacote de análise (guia: modelos/guias/evolucao-de-agente.md)
 
   asimov agente listar                                   referências dos agentes (empresa/agente)
   asimov agente contexto <ref>                           configuração efetiva em JSON, sem credenciais
@@ -270,11 +313,11 @@ asimov agente: evoluir um agente a partir do pacote de análise (guia: modelos/g
   asimov agente envio <ref>                              link para o aluno mandar o pacote pelo navegador
   asimov agente receber <ref> [--esperar <s>] [arquivo...]  guarda o pacote (do link ou do disco) e abre os ZIPs
   asimov agente prompt ver <ref>                         prompt aplicado agora
-  asimov agente prompt aplicar <ref> <arquivo> --motivo "..."
+  asimov agente prompt aplicar <ref> <arquivo> --motivo "..."   (o operador aprova)
   asimov agente prompt historico <ref>                   versões guardadas
   asimov agente prompt versao <ref> <n>                  texto de uma versão
-  asimov agente prompt restaurar <ref> <n>               volta ao texto de uma versão
-  asimov agente conversa <ref> "mensagem" [--conversa <id>]  conversa de teste; mostra as ferramentas chamadas
+  asimov agente prompt restaurar <ref> <n>               volta ao texto de uma versão (o operador aprova)
+  asimov agente conversa <ref> "mensagem" [--conversa <id>]  conversa de teste de verdade (o operador aprova)
 
 Ferramentas próprias: asimov ferramenta ajuda
 EOF

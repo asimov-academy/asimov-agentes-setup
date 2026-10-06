@@ -50,7 +50,7 @@ gera_segredos() {
   # precisa reiniciar a API para ela enxergar a chave nova.
   env_set_se_vazio WAHA_API_KEY "$(openssl rand -hex 32)"
   env_set_se_vazio LOG_NIVEL INFO
-  for variavel in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY OPENROUTER_API_KEY MODELO_FALLBACK; do
+  for variavel in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY GROQ_API_KEY MODELO_FALLBACK; do
     env_set_se_vazio "$variavel" ""
   done
   # Os contêineres rodam com o usuário 1000 e criam os prompts de cada agente.

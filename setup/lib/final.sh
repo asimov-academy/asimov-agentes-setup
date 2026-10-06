@@ -26,63 +26,157 @@ gera_arquivos_de_contexto() {
   garante_permissoes_dos_assistentes
 }
 
-# garante_permissoes_dos_assistentes: `asimov agente` e `asimov ferramenta` falam com a API em
-# 127.0.0.1 e com o Docker. O Codex roda cada comando num sandbox sem rede e pedia aprovação a cada
-# um (o aluno via "a API não respondeu"). A regra `allow` roda fora do sandbox sem perguntar; ativar,
-# segredo e executar ficam em `prompt`, e o operador aprova. O arquivo é da plataforma: a
-# atualização o reescreve. No Claude Code o mesmo vai no settings do projeto, somando ao que existe.
-garante_permissoes_dos_assistentes() {
-  local regras="$HOME/.codex/rules" settings="$RAIZ_PROJETO/.claude/settings.json" atual
-  if [ -d "$HOME/.codex" ]; then
-    # O sandbox do Codex usa o bubblewrap do sistema; sem ele, avisa em toda abertura.
-    if ! command -v bwrap >/dev/null 2>&1 && command -v apt_instala >/dev/null 2>&1; then
-      apt_instala bubblewrap >>"$LOG" 2>&1 || true
-    fi
-    mkdir -p "$regras"
-    cat >"$regras/asimov.rules" <<'REGRAS'
-# Gerado pelo instalador do Asimov Agentes: asimov atualizar reescreve este arquivo.
-# Os comandos do Asimov falam com a API local (127.0.0.1) e com o Docker: rodam fora do sandbox.
-prefix_rule(pattern = ["asimov", "agente"], decision = "allow", justification = "fala com a API local do Asimov")
-prefix_rule(pattern = ["asimov", "ferramenta"], decision = "allow", justification = "fala com a API local e com o Docker")
-prefix_rule(pattern = ["asimov", "agentes"], decision = "allow", justification = "lista os agentes pela API local")
-prefix_rule(pattern = ["asimov", "diagnostico"], decision = "allow", justification = "confere a instalação")
-prefix_rule(pattern = ["asimov", "ferramenta", "ativar"], decision = "prompt", justification = "muda o atendimento: o operador aprova")
-prefix_rule(pattern = ["asimov", "ferramenta", "segredo"], decision = "prompt", justification = "credencial: o operador aprova")
-prefix_rule(pattern = ["asimov", "ferramenta", "executar"], decision = "prompt", justification = "chamada de verdade: o operador aprova")
-REGRAS
+# A área de trabalho do assistente de código: `agentes/`. Ele grava só ali (o sandbox do Codex
+# limita a escrita à pasta onde abriu; o Claude Code pede aprovação para editar fora), e o código que
+# os comandos `asimov` executam (`setup/`, `deploy/`) e o `.env` ficam fora do alcance. Por isso as
+# regras que liberam os comandos moram só nesta pasta: aberto na raiz, o assistente que pudesse
+# editar `setup/lib` e rodar `asimov` sem aprovação rodaria o que quisesse como root.
+AREA_DO_ASSISTENTE="$RAIZ_PROJETO/agentes"
+CABECALHO_REGRAS="# Gerado pelo instalador do Asimov Agentes: asimov atualizar reescreve este arquivo."
+# Subcomando por subcomando: liberar o prefixo `asimov agente` e pedir aprovação só para `prompt
+# aplicar` deixava passar `asimov agente 'prompt' aplicar` no Claude Code, que compara texto. O que
+# não está aqui cai no padrão do CLI, que é perguntar.
+COMANDOS_LIBERADOS=(
+  "asimov agente listar" "asimov agente contexto" "asimov agente preparar" "asimov agente envio"
+  "asimov agente receber" "asimov agente ajuda" "asimov agente prompt ver" "asimov agente prompt historico"
+  "asimov agente prompt versao" "asimov ferramenta listar" "asimov ferramenta testar"
+  "asimov ferramenta desligar" "asimov ferramenta execucoes" "asimov ferramenta diagnostico"
+  "asimov ferramenta ajuda" "asimov agentes" "asimov diagnostico"
+)
+# O que versões até a v0.37 gravavam: sai da raiz e da área na atualização.
+REGRAS_ANTIGAS_DO_CLAUDE=(
+  "Bash(asimov agente:*)" "Bash(asimov ferramenta:*)" "Bash(asimov agentes:*)" "Bash(asimov diagnostico:*)"
+  "Bash(asimov ferramenta ativar:*)" "Bash(asimov ferramenta segredo:*)" "Bash(asimov ferramenta executar:*)"
+)
+# Mudam o atendimento ou um sistema de fora: o operador aprova cada um.
+COMANDOS_COM_APROVACAO=(
+  "asimov agente prompt aplicar" "asimov agente prompt restaurar" "asimov agente conversa"
+  "asimov ferramenta ativar" "asimov ferramenta ligar" "asimov ferramenta restaurar"
+  "asimov ferramenta segredo" "asimov ferramenta executar"
+)
+
+# substitui_bloco ARQUIVO MARCA ARQUIVO_DO_BLOCO: o trecho entre `<!-- MARCA -->` e `<!-- /MARCA -->`
+# vira o do bloco (que traz as marcas); sem as duas marcas, o bloco entra no fim. O resto do arquivo
+# é do operador e fica. Publica por rename: quem lê nunca vê o arquivo pela metade.
+substitui_bloco() {
+  local arquivo=$1 ini="<!-- $2 -->" fim="<!-- /$2 -->" bloco=$3 temporario
+  temporario=$(mktemp "$(dirname "$arquivo")/.contexto.XXXXXX") || return 1
+  if [ -f "$arquivo" ] && grep -qxF "$ini" "$arquivo" && grep -qxF "$fim" "$arquivo"; then
+    awk -v ini="$ini" -v fim="$fim" -v bloco="$bloco" '
+      $0 == ini && !feito { while ((getline linha < bloco) > 0) print linha; pulando = 1; feito = 1; next }
+      pulando { if ($0 == fim) pulando = 0; next }
+      { print }' "$arquivo" >"$temporario" || { rm -f "$temporario"; return 1; }
+  else
+    { if [ -s "$arquivo" ]; then cat "$arquivo"; printf '\n'; fi; cat "$bloco"; } >"$temporario" ||
+      { rm -f "$temporario"; return 1; }
   fi
-  # Só numa pasta de projeto instalada (com o contexto dos assistentes), nunca no repositório.
-  [ -f "$RAIZ_PROJETO/AGENTS.md" ] || return 0
-  mkdir -p "$RAIZ_PROJETO/.claude"
-  atual='{}'
-  if [ -s "$settings" ]; then
-    atual=$(jq -c . "$settings" 2>/dev/null || echo '{}')
-  fi
-  jq '.permissions.allow = ((.permissions.allow // []) + [
-        "Bash(asimov agente:*)", "Bash(asimov ferramenta:*)", "Bash(asimov agentes:*)", "Bash(asimov diagnostico:*)"
-      ] | unique)
-      | .permissions.ask = ((.permissions.ask // []) + [
-        "Bash(asimov ferramenta ativar:*)", "Bash(asimov ferramenta segredo:*)", "Bash(asimov ferramenta executar:*)"
-      ] | unique)' <<<"$atual" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+  chmod 644 "$temporario" && mv "$temporario" "$arquivo"
 }
 
-# garante_contexto_de_evolucao: AGENTS.md que já existia (o instalador nunca o sobrescreve) ganha só
-# a seção de entrada, uma vez. O resto do texto do operador fica como está.
+# garante_permissoes_dos_assistentes: tira as regras antigas (globais no Codex, na raiz no Claude
+# Code) e grava as da área do assistente.
+garante_permissoes_dos_assistentes() {
+  local regras_antigas="$HOME/.codex/rules/asimov.rules" settings="$RAIZ_PROJETO/.claude/settings.json" limpo
+  if [ -f "$regras_antigas" ] && [ "$(head -1 "$regras_antigas")" = "$CABECALHO_REGRAS" ]; then
+    rm -f "$regras_antigas"
+  fi
+  # O sandbox do Codex usa o bubblewrap do sistema; sem ele, avisa em toda abertura.
+  if [ -d "$HOME/.codex" ] && ! command -v bwrap >/dev/null 2>&1 && command -v apt_instala >/dev/null 2>&1; then
+    apt_instala bubblewrap >>"$LOG" 2>&1 || true
+  fi
+  if [ -s "$settings" ] && jq -e . "$settings" >/dev/null 2>&1; then
+    limpo=$(jq --argjson nossos "$(_regras_nossas_e_antigas)" '
+      if .permissions then
+        .permissions.allow = ((.permissions.allow // []) - $nossos)
+        | .permissions.ask = ((.permissions.ask // []) - $nossos)
+      else . end' "$settings") && printf '%s\n' "$limpo" >"$settings"
+  fi
+  garante_area_do_assistente
+}
+
+_regras_nossas_e_antigas() {
+  _regras_do_claude | jq -c --args '.permissions.allow + .permissions.ask + $ARGS.positional' "${REGRAS_ANTIGAS_DO_CLAUDE[@]}"
+}
+
+# _regras_do_claude: allow, ask e deny do `.claude/settings.json` da área. Caminho com `//` é absoluto.
+_regras_do_claude() {
+  local comando raiz="/$RAIZ_PROJETO"
+  {
+    for comando in "${COMANDOS_LIBERADOS[@]}"; do printf 'allow\tBash(%s:*)\n' "$comando"; done
+    for comando in "${COMANDOS_COM_APROVACAO[@]}"; do printf 'ask\tBash(%s:*)\n' "$comando"; done
+    printf 'deny\t%s\n' "Edit(/.claude/**)" "Edit(/.codex/**)" "Edit($raiz/setup/**)" "Edit($raiz/deploy/**)" \
+      "Edit($raiz/.env)" "Read($raiz/.env)"
+  } | jq -Rn '[inputs | split("\t")] | {permissions: {
+      allow: map(select(.[0] == "allow") | .[1]),
+      ask: map(select(.[0] == "ask") | .[1]),
+      deny: map(select(.[0] == "deny") | .[1])}}'
+}
+
+# garante_area_do_assistente: `agentes/` com AGENTS.md, CLAUDE.md e as permissões dos dois CLIs. O
+# Codex só carrega `.codex/rules` de pasta em que o operador confiou, e mantém `.codex` só de
+# leitura dentro do sandbox.
+garante_area_do_assistente() {
+  local area=$AREA_DO_ASSISTENTE comando prefixo
+  mkdir -p "$area/.codex/rules" "$area/.claude"
+  chmod 700 "$area"
+  substitui_bloco "$area/AGENTS.md" asimov:area "$RAIZ_PROJETO/modelos/assistente/AGENTS.md" || return 1
+  [ -e "$area/CLAUDE.md" ] || printf '@AGENTS.md\n' >"$area/CLAUDE.md"
+  [ -e "$area/.codex/config.toml" ] ||
+    printf '# Área do assistente do Asimov Agentes. As regras dos comandos estão em rules/.\n' >"$area/.codex/config.toml"
+  {
+    printf '%s\n' "$CABECALHO_REGRAS"
+    printf '# Os comandos do Asimov falam com a API local e com o Docker: rodam fora do sandbox.\n'
+    for comando in "${COMANDOS_LIBERADOS[@]}"; do
+      prefixo=$(jq -cn --arg c "$comando" '$c | split(" ")')
+      printf 'prefix_rule(pattern = %s, decision = "allow", justification = "fala com a API local do Asimov")\n' "$prefixo"
+    done
+    for comando in "${COMANDOS_COM_APROVACAO[@]}"; do
+      prefixo=$(jq -cn --arg c "$comando" '$c | split(" ")')
+      printf 'prefix_rule(pattern = %s, decision = "prompt", justification = "muda o atendimento: o operador aprova")\n' "$prefixo"
+    done
+  } >"$area/.codex/rules/asimov.rules"
+  confere_area_do_assistente
+}
+
+# confere_area_do_assistente: o `.claude/` da área é da plataforma. O Codex grava em `agentes/` (só o
+# `.codex/` fica protegido no sandbox dele), e um `settings.json` plantado ali valeria na próxima
+# sessão do Claude Code: regra `allow` ampla ou `hooks`, que rodam sozinhos ao abrir. Todo
+# `asimov agente` e `asimov ferramenta` confere e devolve o arquivo ao da instalação.
+confere_area_do_assistente() {
+  local claude="$AREA_DO_ASSISTENTE/.claude" esperado
+  [ -d "$AREA_DO_ASSISTENTE" ] || return 0
+  mkdir -p "$claude"
+  esperado=$(_regras_do_claude | jq -S .)
+  if [ -e "$claude/settings.local.json" ] || [ "$(jq -S . "$claude/settings.json" 2>/dev/null || true)" != "$esperado" ]; then
+    if [ -e "$claude/settings.json" ] || [ -e "$claude/settings.local.json" ]; then
+      printf 'aviso: as configurações do Claude Code em %s foram mudadas por fora; voltaram às da instalação\n' "$claude" >&2
+      printf '%s agentes/.claude restaurado\n' "$(date -Is)" >>"${LOG:-/dev/null}"
+    fi
+    rm -f "$claude/settings.local.json"
+    printf '%s\n' "$esperado" >"$claude/settings.json.tmp" && mv "$claude/settings.json.tmp" "$claude/settings.json"
+  fi
+}
+
+# garante_contexto_de_evolucao: o AGENTS.md da raiz (do operador; o instalador nunca o troca inteiro)
+# ganha ou atualiza só a seção de entrada, que manda evoluir agentes de dentro de `agentes/`.
 MARCA_EVOLUCAO="<!-- asimov:evolucao -->"
 garante_contexto_de_evolucao() {
-  local agentes="$RAIZ_PROJETO/AGENTS.md"
+  local agentes="$RAIZ_PROJETO/AGENTS.md" bloco
   [ -f "$agentes" ] || return 0
-  grep -qF "$MARCA_EVOLUCAO" "$agentes" && return 0
-  {
-    printf '\n'
-    sed -n "/$MARCA_EVOLUCAO/,/<!-- \/asimov:evolucao -->/p" "$RAIZ_PROJETO/modelos/AGENTS.md.tmpl"
-  } >>"$agentes"
-  printf 'AGENTS.md: acrescentada a seção de evolução de agentes\n' >>"$LOG"
+  bloco=$(mktemp) || return 1
+  sed -n "/$MARCA_EVOLUCAO/,/<!-- \/asimov:evolucao -->/p" "$RAIZ_PROJETO/modelos/AGENTS.md.tmpl" >"$bloco"
+  if ! cmp -s <(sed -n "/$MARCA_EVOLUCAO/,/<!-- \/asimov:evolucao -->/p" "$agentes") "$bloco"; then
+    substitui_bloco "$agentes" asimov:evolucao "$bloco" || { rm -f "$bloco"; return 1; }
+    printf 'AGENTS.md: seção de evolução de agentes atualizada\n' >>"$LOG"
+  fi
+  rm -f "$bloco"
 }
 
-# contexto_de_evolucao_ok: AGENTS.md com a orientação de entrada. Diagnóstico avisa quando falta.
+# contexto_de_evolucao_ok: AGENTS.md da raiz com a orientação e a área do assistente montada.
 contexto_de_evolucao_ok() {
-  [ -s "$RAIZ_PROJETO/AGENTS.md" ] && grep -qF "$MARCA_EVOLUCAO" "$RAIZ_PROJETO/AGENTS.md"
+  [ -s "$RAIZ_PROJETO/AGENTS.md" ] && grep -qF "$MARCA_EVOLUCAO" "$RAIZ_PROJETO/AGENTS.md" &&
+    grep -qF '<!-- asimov:area -->' "$AREA_DO_ASSISTENTE/AGENTS.md" 2>/dev/null &&
+    [ -f "$AREA_DO_ASSISTENTE/.codex/rules/asimov.rules" ]
 }
 
 instala_comando() {
@@ -132,7 +226,7 @@ mostra_resumo() {
     campo "Copiloto" "$(ia_nome)$([ -n "$(env_get IA_CONTA)" ] && printf ' · %s' "$(env_get IA_CONTA)")"
   fi
   campo "Pasta" "$RAIZ_PROJETO"
-  campo "Assistentes" "AGENTS.md e CLAUDE.md disponíveis nesta pasta"
+  campo "Assistentes" "evoluir agentes: cd $RAIZ_PROJETO/agentes && claude (ou codex)"
   campo "Uso" "$([ "$(env_get MODO_INSTALACAO)" = revenda ] && echo 'revenda para empresas clientes' || echo 'só a minha empresa')"
   echo
   resumo_acesso_ao_painel

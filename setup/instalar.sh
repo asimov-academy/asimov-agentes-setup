@@ -19,6 +19,7 @@ atualiza() {
   gera_arquivos_de_contexto || erro_fatal "Não foi possível preparar o contexto dos assistentes" "Confira $LOG e rode novamente."
   # O pacote da atualização traz o painel.caddy desligado por cima do bloco do operador.
   painel_garante_caddy
+  confere_painel_depois_de_atualizar
   # A WAHA passou a vir com a instalação: VPS instalada por uma versão anterior pode não ter o
   # contêiner, o timer semanal nem os eventos de hoje nas sessões que já existem.
   garante_waha

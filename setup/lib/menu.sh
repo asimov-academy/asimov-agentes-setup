@@ -448,23 +448,27 @@ edita_jeito() {
 # O material que o agente sabe além do prompt. O painel tem a mesma coisa na aba Treinamento, pelas
 # mesmas rotas: aqui o arquivo já está na VPS, e lá ele sobe pelo navegador.
 edita_conhecimento() {
-  local op caminho arquivo texto url documentos linhas
+  local op caminho arquivo texto url pergunta_teste documentos linhas
   while true; do
     caminho="$(caminho_do_agente "$AGENTE")/documentos"
     api GET "$caminho"
     exige_api
     documentos=$API_RESPOSTA
-    linhas=$(jq -r '.[] | "  \(.nome)  [\(.status)\(if .status == "pronto" then ", \(.total_trechos) trechos" else "" end)]\(if .erro != "" then "  " + .erro else "" end)"' <<<"$documentos")
+    linhas=$(jq -r '.[] | "  \(.nome)  [\(if .status == "reprocessando" then "lendo de novo" else .status end)\(if .status == "pronto" or .status == "reprocessando" then ", \(.total_trechos) trechos" else "" end)]\(if .erro != "" then "  " + .erro else "" end)\(if (.aviso // "") != "" then "  " + .aviso else "" end)"' <<<"$documentos")
     if [ -n "$linhas" ]; then
       printf '%s\n\n' "$linhas"
     else
       dica "Ele ainda não sabe nada além do prompt."
     fi
 
-    ESC_ESCOLHE=5 escolha op "Base de conhecimento" \
-      "Enviar um arquivo  ${CINZA}PDF, DOCX, TXT ou MD que já está na VPS${NORMAL}" \
+    ESC_ESCOLHE=9 escolha op "Base de conhecimento" \
+      "Enviar um arquivo  ${CINZA}PDF, DOCX, XLSX, CSV, TXT, MD, HTML ou foto que já está na VPS${NORMAL}" \
       "Ensinar uma frase  ${CINZA}uma afirmação por vez${NORMAL}" \
       "Ensinar por site  ${CINZA}o texto de uma página${NORMAL}" \
+      "Testar uma pergunta  ${CINZA}o que a busca acharia, sem gastar com resposta${NORMAL}" \
+      "Ver trechos de um material  ${CINZA}o que a busca enxerga${NORMAL}" \
+      "Ler de novo um material  ${CINZA}relê o original guardado${NORMAL}" \
+      "Ler de novo tudo  ${CINZA}depois de trocar a chave de IA, por exemplo${NORMAL}" \
       "Remover um material" \
       "Voltar"
     case "$op" in
@@ -485,6 +489,29 @@ edita_conhecimento() {
         api POST "$caminho/site" "$(jq -n --arg u "$url" '{url: $u}')"
         ;;
       4)
+        pergunta pergunta_teste "Pergunte como um cliente"
+        api POST "$(caminho_do_agente "$AGENTE")/base/teste" "$(jq -n --arg p "$pergunta_teste" '{pergunta: $p}')"
+        if [ "$API_STATUS" = 200 ]; then
+          mostra_teste_da_base
+        else
+          printf '%s\n' "$(falha "$(detalhe_erro "$API_RESPOSTA")")"
+          pausa
+        fi
+        continue
+        ;;
+      5)
+        escolhe_documento "$documentos" "Ver os trechos de qual?" || continue
+        mostra_trechos "$caminho/$DOCUMENTO_ID"
+        continue
+        ;;
+      6)
+        escolhe_documento "$documentos" "Ler de novo qual?" || continue
+        api POST "$caminho/$DOCUMENTO_ID/reprocessar"
+        ;;
+      7)
+        api POST "$caminho/reprocessar"
+        ;;
+      8)
         escolhe_documento "$documentos" || continue
         api DELETE "$caminho/$DOCUMENTO_ID"
         ;;
@@ -499,6 +526,36 @@ edita_conhecimento() {
   done
 }
 
+# mostra_teste_da_base: o resultado de "Testar uma pergunta" (em API_RESPOSTA), em ordem, com o que
+# entrou na resposta e o que ficou de fora.
+mostra_teste_da_base() {
+  if [ "$(jq '.trechos | length' <<<"$API_RESPOSTA")" -eq 0 ]; then
+    dica "Nada na base sobre isso: o agente diria que não tem essa informação."
+    pausa
+    return 0
+  fi
+  jq -r --arg cinza "$CINZA" --arg normal "$NORMAL" --arg verde "$VERDE" '
+    .trechos[] |
+    "\(if .entrou then $verde + "entrou" else $cinza + (.motivo // "ficou de fora") end)\($normal)  \(.posicao)º  \(.documento)\(if .secao != "" then " > " + .secao else "" end)  \($cinza)por \(.via)\(if .distancia != null then ", distância \(.distancia * 100 | round / 100)" else "" end)\($normal)\n  \(.texto | gsub("\n"; " ") | .[0:200])\n"' <<<"$API_RESPOSTA"
+  pausa
+}
+
+# mostra_trechos CAMINHO_DO_DOCUMENTO: os primeiros trechos, como a busca enxerga, com seção e
+# páginas. O painel mostra todos, com a tabela desenhada.
+mostra_trechos() {
+  api GET "$1/trechos?pagina=1"
+  if [ "$API_STATUS" != 200 ]; then
+    printf '%s\n' "$(falha "$(detalhe_erro "$API_RESPOSTA")")"
+    pausa
+    return 0
+  fi
+  jq -r --arg cinza "$CINZA" --arg normal "$NORMAL" '
+    .trechos[] |
+    "\($cinza)#\(.ordem)\(if .secao != "" then "  " + .secao else "" end)\(if .pagina_inicio != null then "  p. \(.pagina_inicio)" + (if .pagina_fim != .pagina_inicio then " a \(.pagina_fim)" else "" end) else "" end)\(if .tipo == "tabela" then "  tabela" else "" end)\($normal)\n\(.texto)\n"' <<<"$API_RESPOSTA"
+  jq -r 'if .total > (.trechos | length) then "  ... e mais \(.total - (.trechos | length)) trechos; o painel mostra todos." else empty end' <<<"$API_RESPOSTA"
+  pausa
+}
+
 # escolhe_documento JSON: grava o id escolhido em DOCUMENTO_ID, ou sai diferente de 0 quando não
 # há o que remover. Por variável, como escolhe_agente: dentro de $(...) a saída não é terminal, e a
 # lista ia para dentro do id em vez da tela.
@@ -508,7 +565,7 @@ escolhe_documento() {
   quantos=$(jq -r 'length' <<<"$1")
   [ "$quantos" -gt 0 ] || return 1
   while IFS= read -r linha; do nomes+=("$linha"); done < <(jq -r '.[] | .nome' <<<"$1")
-  ESC_ESCOLHE=$((quantos + 1)) escolha op "Remover qual?" "${nomes[@]}" "Voltar"
+  ESC_ESCOLHE=$((quantos + 1)) escolha op "${2:-Remover qual?}" "${nomes[@]}" "Voltar"
   [ "$op" -le "$quantos" ] || return 1
   DOCUMENTO_ID=$(jq -r --argjson i "$((op - 1))" '.[$i].id' <<<"$1")
 }
@@ -650,7 +707,7 @@ mostra_consumo() {
       def soma(lista): {
         turnos: (lista | map(.turnos) | add // 0),
         tokens: (lista | map(.tokens_entrada + .tokens_saida) | add // 0),
-        custo: (lista | map(.custo_estimado | tonumber) | add // 0),
+        custo: (lista | map((.custo_estimado | tonumber) + ((.custo_base // 0) | tonumber)) | add // 0),
         sem_custo: (lista | map(.sem_custo) | add // 0)
       };
       def curto: if . >= 1000000 then "\(. / 100000 | floor / 10)M"

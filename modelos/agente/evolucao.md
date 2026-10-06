@@ -1,6 +1,7 @@
 # Evolução do agente
 
-Estado do trabalho de evolução deste agente. Siga `modelos/guias/evolucao-de-agente.md`.
+Estado do trabalho de evolução deste agente. Siga o guia `modelos/guias/evolucao-de-agente.md` da
+instalação (`../../../modelos/guias/` a partir desta pasta).
 A próxima sessão começa por aqui: mantenha atualizado.
 
 ## Fase atual

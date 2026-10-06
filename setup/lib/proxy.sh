@@ -59,21 +59,11 @@ prepara_rede() {
   fi
 }
 
-# Arquivo próprio importável pelo Caddy do host, também serve de referência para outros proxies.
-gera_proxy_externo() {
-  local sub painel porta
-  sub=$(env_get SUBDOMINIO_BOT); painel=$(env_get SUBDOMINIO_APP)
-  porta=$(env_get ASIMOV_PORTA_HTTP)
-  # Endereço é dado validado no onboarding. Recusa caracteres de configuração mesmo ao retomar.
-  [[ "$sub" =~ ^[a-zA-Z0-9.-]+$ ]] || return 1
-  [[ -z "$painel" || "$painel" =~ ^[a-zA-Z0-9.-]+$ ]] || return 1
-  {
-    printf '# Gerado pelo Asimov. O gateway interno bloqueia /admin.\n'
-    printf '%s {\n reverse_proxy 127.0.0.1:%s\n}\n' "$sub" "$porta"
-    if [ -n "$painel" ] && painel_ligado; then
-      printf '%s {\n reverse_proxy 127.0.0.1:%s\n}\n' "$painel" "$porta"
-    fi
-  } >"$RAIZ_PROJETO/deploy/proxy-externo.caddy"
+# Caddyfile do Caddy do host: o da última integração, ou o padrão do pacote.
+caddyfile_do_host() {
+  local config
+  config=$(estado_get proxy_host_caddyfile || true)
+  printf '%s' "${config:-/etc/caddy/Caddyfile}"
 }
 
 # dominio_no_caddyfile ARQUIVO DOMINIO: o domínio é endereço de site no próprio arquivo, colado à
@@ -83,27 +73,54 @@ dominio_no_caddyfile() {
   $SUDO grep -Eq "(^|[[:space:],])(https?://)?${dominio}(:[0-9]+)?[[:space:]]*([,{]|$)" "$arquivo" 2>/dev/null
 }
 
+# dominios_do_asimov [CADDYFILE]: os endereços que o bloco do Asimov precisa ter, um por linha: o do
+# bot e o do painel, quando ligado. Fora os que o operador já colou à mão no Caddyfile: definir um
+# domínio duas vezes faz o Caddy recusar o arquivo inteiro. Cada domínio é decidido sozinho: o bot
+# colado à mão nunca pode deixar o painel sem endereço.
+dominios_do_asimov() {
+  local config=${1:-} dominio
+  [ -n "$config" ] || config=$(caddyfile_do_host)
+  for dominio in "$(env_get SUBDOMINIO_BOT)" "$(painel_ligado && env_get SUBDOMINIO_APP || true)"; do
+    [ -n "$dominio" ] || continue
+    dominio_no_caddyfile "$config" "$dominio" || printf '%s\n' "$dominio"
+  done
+}
+
+# Arquivo próprio importável pelo Caddy do host, também serve de referência para outros proxies.
+# Só leva os domínios que ainda não estão no Caddyfile (dominios_do_asimov).
+gera_proxy_externo() {
+  local dominio porta
+  porta=$(env_get ASIMOV_PORTA_HTTP)
+  # Endereço é dado validado no onboarding. Recusa caracteres de configuração mesmo ao retomar.
+  [[ "$(env_get SUBDOMINIO_BOT)" =~ ^[a-zA-Z0-9.-]+$ ]] || return 1
+  [[ -z "$(env_get SUBDOMINIO_APP)" || "$(env_get SUBDOMINIO_APP)" =~ ^[a-zA-Z0-9.-]+$ ]] || return 1
+  {
+    printf '# Gerado pelo Asimov. O gateway interno bloqueia /admin.\n'
+    while IFS= read -r dominio; do
+      printf '%s {\n reverse_proxy 127.0.0.1:%s\n}\n' "$dominio" "$porta"
+    done < <(dominios_do_asimov "${1:-}")
+  } >"$RAIZ_PROJETO/deploy/proxy-externo.caddy"
+}
+
 # situacao_caddy_host: proprio (o Caddy do Asimov tem as portas 80 e 443), sem_integracao (outro
 # proxy, ajustado fora daqui), integrado, manual (o domínio colado à mão no Caddyfile) ou perdido:
 # a linha `import` ou o bloco do Asimov sumiram. Perdido deixa o domínio sem HTTPS, e o Chatwoot e o
 # WhatsApp oficial param de alcançar os agentes sem nenhum aviso do lado de cá.
 situacao_caddy_host() {
-  local config snippet sub
+  local config snippet dominios dominio
   [ "$(env_get ASIMOV_PROXY)" = externo ] || { echo proprio; return 0; }
   estado_tem proxy_host_integrado || { echo sem_integracao; return 0; }
-  config=$(estado_get proxy_host_caddyfile || true)
-  config=${config:-/etc/caddy/Caddyfile}
+  config=$(caddyfile_do_host)
   snippet="$(dirname "$config")/asimov.caddy"
-  sub=$(env_get SUBDOMINIO_BOT)
-  if $SUDO grep -qxF "import $snippet" "$config" 2>/dev/null &&
-      $SUDO grep -q '^# Gerado pelo Asimov\.' "$snippet" 2>/dev/null &&
-      $SUDO grep -qF "$sub {" "$snippet" 2>/dev/null; then
-    echo integrado
-  elif dominio_no_caddyfile "$config" "$sub"; then
-    echo manual
-  else
-    echo perdido
-  fi
+  dominios=$(dominios_do_asimov "$config")
+  # Nada a importar: todos os endereços do Asimov já estão no Caddyfile, colados à mão.
+  [ -n "$dominios" ] || { echo manual; return 0; }
+  $SUDO grep -qxF "import $snippet" "$config" 2>/dev/null || { echo perdido; return 0; }
+  $SUDO grep -q '^# Gerado pelo Asimov\.' "$snippet" 2>/dev/null || { echo perdido; return 0; }
+  while IFS= read -r dominio; do
+    $SUDO grep -qF "$dominio {" "$snippet" 2>/dev/null || { echo perdido; return 0; }
+  done <<<"$dominios"
+  echo integrado
 }
 
 # Recupera só a transação do Asimov. Nenhuma configuração alheia é apagada.
@@ -154,9 +171,12 @@ integra_caddy_host() (
   [[ "$comando" == *"--config $config_caddy "* || "$comando" == *"--config=$config_caddy "* ]] || return 1
   [ -f "$config_caddy" ] && [ ! -L "$config_caddy" ] && [ ! -L "$destino" ] || return 1
   restaura_proxy || return 1
-  # Domínio colado à mão no Caddyfile: importar o bloco do Asimov o definiria duas vezes, e o Caddy
-  # recusaria o arquivo inteiro, travando a atualização. O que já funciona fica como está (código 3).
-  if dominio_no_caddyfile "$config_caddy" "$(env_get SUBDOMINIO_BOT)"; then
+  # O bloco do Asimov só leva o que o Caddyfile ainda não tem: domínio colado à mão importado de novo
+  # seria definido duas vezes, e o Caddy recusaria o arquivo inteiro. Refeito aqui, com o Caddyfile
+  # certo, porque o operador pode ter colado o bot (ou o painel) depois da última geração.
+  gera_proxy_externo "$config_caddy" || return 1
+  if ! grep -q '{' "$RAIZ_PROJETO/deploy/proxy-externo.caddy"; then
+    # Todos os domínios já estão colados à mão: nada a importar, o que funciona fica como está (3).
     estado_set proxy_host_caddyfile "$config_caddy"
     estado_set proxy_host_integrado 1
     return 3
@@ -203,8 +223,8 @@ integra_caddy_ou_explica() {
   local codigo=0
   integra_caddy_host || codigo=$?
   if [ "$codigo" = 3 ]; then
-    aviso "O Caddy da VPS já tem $(env_get SUBDOMINIO_BOT) colado à mão, fora do Asimov: deixei como está."
-    dica "Se ele parar de responder, apague esse bloco do Caddyfile e rode asimov diagnostico."
+    aviso "Os endereços do Asimov já estão colados à mão no Caddy da VPS, fora do Asimov: deixei como está."
+    dica "Se algum parar de responder, apague o bloco dele do Caddyfile e rode asimov diagnostico."
     return 0
   fi
   return "$codigo"
@@ -215,8 +235,8 @@ integra_caddy_ou_explica() {
 # outros sites. Não mexe em nada sem o operador confirmar.
 repara_caddy_host() {
   [ "$(situacao_caddy_host)" = perdido ] || return 0
-  falha "O Caddy da VPS perdeu o endereço $(destaque "$(env_get SUBDOMINIO_BOT)")."
-  dica "Sem ele, o Chatwoot e o WhatsApp oficial não alcançam os agentes. O teste no terminal continua funcionando."
+  falha "O Caddy da VPS perdeu o endereço $(destaque "$(dominios_do_asimov | paste -sd' ' -)")."
+  dica "Sem ele, o painel, o Chatwoot e o WhatsApp oficial não alcançam a plataforma. O teste no terminal continua funcionando."
   confirma "Refazer a integração agora? Os outros sites da VPS ficam como estão." || return 0
   if gera_proxy_externo && integra_caddy_ou_explica; then
     ok "Integração refeita."

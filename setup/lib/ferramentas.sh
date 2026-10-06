@@ -16,6 +16,7 @@ ARQ_FERRAMENTAS_COMPOSE="$RAIZ_PROJETO/deploy/ferramentas.compose.yml"
 # Teto do contêiner de cada empresa: cobre umas 8 chamadas juntas, que é a rajada de 3 agentes com
 # mil conversas por dia cada (spec/decisoes.md, 2026-09-30). Ajustável no .env.
 FERRAMENTAS_MEMORIA_PADRAO=512m
+FE_ENDURECIDO=(--cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 1g)
 FERRAMENTAS_CPUS_PADRAO=1.0
 
 imagem_backend() {
@@ -38,9 +39,17 @@ prepara_ferramentas() {
   [ -z "$ips" ] || env_set ASIMOV_IPS_DO_HOST "$ips"
 }
 
+# executor_troca_uid: a imagem da versão no .env já roda o código da ferramenta com outro uid? Com o
+# compose novo e o executor antigo (volta de versão, ou instalador publicado antes da imagem), o
+# código rodaria como root com capacidades: aí o contêiner fica como antes, com o uid 1000.
+executor_troca_uid() {
+  [ "$($SUDO docker run --rm --network none "$(imagem_backend)" python -c \
+    'import app.ferramentas_proprias.executor as e; print(hasattr(e, "UID_DO_CODIGO"))' 2>/dev/null || true)" = True ]
+}
+
 # ferramentas_gera_compose EMPRESA...: um serviço por empresa com ferramenta ligada.
 ferramentas_gera_compose() {
-  local empresa memoria cpus imagem
+  local empresa memoria cpus imagem usuario='"1000:1000"' capacidades="" uid_do_codigo=""
   memoria=$(env_get FERRAMENTAS_MEMORIA)
   cpus=$(env_get FERRAMENTAS_CPUS)
   # Literal de propósito: o Compose resolve pelo .env, igual aos outros serviços.
@@ -49,6 +58,15 @@ ferramentas_gera_compose() {
   if [ "$#" -eq 0 ]; then
     rm -f "$ARQ_FERRAMENTAS_COMPOSE"
     return 0
+  fi
+  # O executor é root do grupo 1000 só com as capacidades de trocar de usuário e de cuidar da pasta
+  # de trabalho; o código de cada agente roda com um uid próprio (a partir de 1001), sem capacidade
+  # nenhuma, e não enxerga /sock (750 do uid 1000): não troca o executor.sock nem vê segredo de
+  # outro agente.
+  if executor_troca_uid; then
+    usuario='"0:1000"'
+    capacidades=$'\n    cap_add: [CHOWN, DAC_OVERRIDE, SETUID, SETGID, KILL]'
+    uid_do_codigo=$'\n      FERRAMENTAS_UID_DO_CODIGO: "1001"'
   fi
   {
     echo "# Gerado por asimov ferramenta: não edite. Um contêiner por empresa com ferramenta ligada."
@@ -60,17 +78,17 @@ ferramentas_gera_compose() {
     container_name: asimov-ferramentas-$empresa
     command: ["uvicorn", "app.ferramentas_proprias.executor:app", "--uds", "/sock/executor.sock", "--no-access-log"]
     network_mode: none
-    user: "1000:1000"
+    user: $usuario
     read_only: true
     tmpfs: ["/tmp:size=256m"]
-    cap_drop: [ALL]
+    cap_drop: [ALL]$capacidades
     security_opt: ["no-new-privileges:true"]
     pids_limit: 256
     mem_limit: ${memoria:-$FERRAMENTAS_MEMORIA_PADRAO}
     cpus: ${cpus:-$FERRAMENTAS_CPUS_PADRAO}
     environment:
       FERRAMENTAS_RAIZ: /ferramentas
-      FERRAMENTAS_SOCK: /sock
+      FERRAMENTAS_SOCK: /sock$uid_do_codigo
     volumes:
       - $PASTA_FERRAMENTAS/$empresa:/ferramentas:ro
       - $PASTA_SOCKETS/$empresa:/sock
@@ -96,7 +114,9 @@ ferramentas_sobe() {
     servicos+=("ferramentas-$empresa")
     $SUDO mkdir -p "$PASTA_FERRAMENTAS/$empresa" "$PASTA_SOCKETS/$empresa"
     $SUDO chown 1000:1000 "$PASTA_FERRAMENTAS/$empresa" "$PASTA_SOCKETS/$empresa"
-    $SUDO chmod 750 "$PASTA_FERRAMENTAS/$empresa" "$PASTA_SOCKETS/$empresa"
+    # O código (uid 1001) lê as versões; o socket fica só para o uid 1000 e o executor.
+    $SUDO chmod 755 "$PASTA_FERRAMENTAS/$empresa"
+    $SUDO chmod 750 "$PASTA_SOCKETS/$empresa"
   done < <(jq -r '.[]' <<<"$API_RESPOSTA")
   ferramentas_gera_compose "${empresas[@]}" || return 1
   # Empresa que ficou sem ferramenta ligada perde o contêiner.
@@ -115,9 +135,9 @@ ev_ferramenta_dev() {
   [[ "$nome" =~ ^[a-z][a-z0-9_]{2,47}$ ]] || ev_erro "nome da ferramenta em minúsculas com _, como consultar_agenda"
   FE_NOME=$nome
   FE_DEV="$(ev_pasta)/ferramentas/$nome"
-  [ -f "$FE_DEV/ferramenta.py" ] || ev_erro "falta ${FE_DEV#"$RAIZ_PROJETO"/}/ferramenta.py (função executa(entrada, contexto, segredos))"
-  [ -f "$FE_DEV/contrato.yaml" ] || ev_erro "falta ${FE_DEV#"$RAIZ_PROJETO"/}/contrato.yaml"
-  [ -d "$FE_DEV/testes" ] || ev_erro "falta ${FE_DEV#"$RAIZ_PROJETO"/}/testes/ com pelo menos um test_*.py"
+  [ -f "$FE_DEV/ferramenta.py" ] || ev_erro "falta $FE_DEV/ferramenta.py (função executa(entrada, contexto, segredos))"
+  [ -f "$FE_DEV/contrato.yaml" ] || ev_erro "falta $FE_DEV/contrato.yaml"
+  [ -d "$FE_DEV/testes" ] || ev_erro "falta $FE_DEV/testes/ com pelo menos um test_*.py"
 }
 
 # ev_ferramenta_contrato: contrato.yaml em JSON, conferido pela API. Define FE_CONTRATO.
@@ -145,12 +165,17 @@ ev_ferramenta_constroi() {
   [ -f "$destino/requirements.txt" ] || $SUDO touch "$destino/requirements.txt"
   $SUDO chown -R 1000:1000 "$destino"
   printf 'instalando dependências...\n'
-  $SUDO docker run --rm --user 1000:1000 -v "$destino:$caminho" "$imagem" \
+  # Código e dependências são do assistente: o contêiner não ganha capacidade nenhuma.
+  $SUDO docker run --rm --user 1000:1000 "${FE_ENDURECIDO[@]}" -v "$destino:$caminho" "$imagem" \
     sh -c "python -m venv $caminho/venv && $caminho/venv/bin/pip install -q --disable-pip-version-check --no-cache-dir -r $caminho/requirements.txt pytest" ||
     return 1
+  # Com o dono e as permissões da versão ativa, e com o uid do código no atendimento (1001): arquivo
+  # sem leitura para os outros passava no teste e só quebrava depois de ativado.
+  $SUDO chown -R root:1000 "$destino"
+  $SUDO chmod -R a-w "$destino"
   printf 'rodando os testes sem rede...\n'
-  FE_TESTES=$($SUDO docker run --rm --network none --read-only --tmpfs /tmp --user 1000:1000 \
-    -e PYTHONDONTWRITEBYTECODE=1 -v "$destino:$caminho:ro" -w "$caminho" "$imagem" \
+  FE_TESTES=$($SUDO docker run --rm --network none --read-only --tmpfs /tmp --user 1001:1001 "${FE_ENDURECIDO[@]}" \
+    -e PYTHONDONTWRITEBYTECODE=1 -e HOME=/tmp -v "$destino:$caminho:ro" -w "$caminho" "$imagem" \
     "$caminho/venv/bin/python" -m pytest -q -p no:cacheprovider testes 2>&1)
   local status=$?
   printf '%s\n' "$FE_TESTES"
@@ -233,10 +258,30 @@ ev_ferramenta_listar() {
   ' <<<"$API_RESPOSTA"
 }
 
+# ev_ferramenta_confirma_altera REF NOME ACAO COMANDO [VERSAO]: ferramenta que muda sistema de fora só
+# volta ao atendimento com o operador no terminal, como no ativar. Com VERSAO vale o efeito daquela
+# versão, não o da ativa (restaurar a v1 que altera a partir de uma v2 de leitura); sem saber o
+# efeito dela, pede o operador.
+ev_ferramenta_confirma_altera() {
+  local efeito
+  ev_api GET "$(ev_caminho)/ferramentas-proprias"
+  [ "$API_STATUS" = 200 ] || ev_erro "$(detalhe_erro "$API_RESPOSTA")"
+  if [ -n "${5:-}" ]; then
+    efeito=$(jq -r --arg n "$2" --argjson v "$5" \
+      '[.[] | select(.nome == $n) | .versoes[] | select(.numero == $v) | .efeito] | first // "altera"' <<<"$API_RESPOSTA")
+  else
+    efeito=$(jq -r --arg n "$2" '[.[] | select(.nome == $n) | .contrato.efeito] | first // ""' <<<"$API_RESPOSTA")
+  fi
+  [ "$efeito" = altera ] || return 0
+  ev_confirma_operador "$2 muda um sistema de fora (reserva, cobrança, envio) quando o agente $EV_NOME ($EV_EMPRESA) conversar com contatos reais." \
+    "$3" "$4"
+}
+
 ev_ferramenta_restaurar() {
   ev_resolve "${1:-}"
   [[ "${2:-}" =~ ^[a-z][a-z0-9_]{2,47}$ ]] && [[ "${3:-}" =~ ^[0-9]+$ ]] ||
     ev_erro "use: asimov ferramenta restaurar <ref> <nome> <versão>"
+  ev_ferramenta_confirma_altera "$1" "$2" RESTAURAR "asimov ferramenta restaurar $1 $2 $3" "$3"
   ev_api POST "$(ev_caminho)/ferramentas-proprias/$2/restaurar" "$(jq -cn --argjson n "$3" '{numero: $n}')"
   [ "$API_STATUS" = 200 ] || ev_erro "$(detalhe_erro "$API_RESPOSTA")"
   ferramentas_sobe >>"$LOG" 2>&1 || true
@@ -248,6 +293,8 @@ ev_ferramenta_liga() {
   shift
   ev_resolve "${1:-}"
   [[ "${2:-}" =~ ^[a-z][a-z0-9_]{2,47}$ ]] || ev_erro "diga o nome da ferramenta"
+  # Desligar nunca pede: tira do atendimento. Ligar devolve ao contato real.
+  [ "$ligada" = false ] || ev_ferramenta_confirma_altera "$1" "$2" LIGAR "asimov ferramenta ligar $1 $2"
   ev_api POST "$(ev_caminho)/ferramentas-proprias/$2/ligada" "{\"ligada\": $ligada}"
   [ "$API_STATUS" = 200 ] || ev_erro "$(detalhe_erro "$API_RESPOSTA")"
   ferramentas_sobe >>"$LOG" 2>&1 || true
@@ -332,11 +379,17 @@ for destino in ["127.0.0.1:8000", "169.254.169.254:443", "10.0.0.1:443", "redis:
     print("proxy", destino, pelo_proxy(destino))
 print("proxy example.com:443 (deve ser 200)", pelo_proxy("example.com:443"))
 PY
+  # O código da ferramenta roda como 1001: não pode alcançar o socket do executor.
+  if $SUDO docker exec --user 1001:1001 "$nome" python -c 'import os; os.listdir("/sock")' >/dev/null 2>&1; then
+    printf 'código da ferramenta em /sock ALCANÇOU (ruim): rode asimov atualizar\n'
+  else
+    printf 'código da ferramenta em /sock bloqueado\n'
+  fi
 }
 
 ev_ferramenta_ajuda() {
   cat <<'EOF'
-asimov ferramenta: ferramentas próprias de um agente (guia: modelos/guias/evolucao-de-agente.md)
+asimov ferramenta: ferramentas próprias de um agente (guia em modelos/guias/ da instalação)
 
   asimov ferramenta listar <ref>                        ativas, versões e segredos que faltam
   asimov ferramenta testar <ref> <nome>                 contrato + dependências + testes sem rede
